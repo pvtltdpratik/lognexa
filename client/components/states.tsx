@@ -1,4 +1,4 @@
-import { DatabaseZapIcon, RefreshCwIcon, SearchXIcon, type LucideIcon } from "lucide-react"
+import { DatabaseZapIcon, KeyRoundIcon, RefreshCwIcon, SearchXIcon, type LucideIcon } from "lucide-react"
 import * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -61,5 +61,15 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
         </div>
       ))}
     </div>
+  )
+}
+
+export function SignInRequired({ feature }: { feature: string }) {
+  return (
+    <EmptyState
+      icon={KeyRoundIcon}
+      title="Sign in required"
+      description={`${feature} is protected. Use "Sign in" in the top bar with an analyst or admin token to continue.`}
+    />
   )
 }

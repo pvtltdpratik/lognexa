@@ -1,0 +1,22 @@
+[project]
+name = "lognexa-agent"
+version = "2.0.0"
+description = "Lognexa cross-platform endpoint monitoring agent (Windows and Linux)"
+requires-python = ">=3.9"
+# No required third-party dependencies: the agent uses only the standard library
+# and OS-native tools. httpx is used automatically if it happens to be installed.
+dependencies = []
+
+[project.optional-dependencies]
+http = ["httpx>=0.27"]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+lognexa-agent = "lognexa_agent.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["lognexa_agent*"]

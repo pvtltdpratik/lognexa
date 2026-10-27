@@ -77,7 +77,7 @@ def user_risk(limit: int = Query(10, ge=1, le=500), db: Session = Depends(get_db
 def top_users(db: Session, limit: int) -> list[UserRisk]:
     open_alerts = (
         select(Alert.user_id, func.count(Alert.id).label("n"))
-        .where(Alert.status == "open").group_by(Alert.user_id).subquery()
+        .where(Alert.status == "open", Alert.source == "access_log").group_by(Alert.user_id).subquery()
     )
     rows = db.execute(
         select(

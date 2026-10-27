@@ -104,3 +104,54 @@ Next.js dev server on :3000):
 - No frontend unit or Playwright tests; UI flows were checked manually.
 - Tests run on SQLite only; PostgreSQL-specific behaviour (e.g. JSON type,
   connection errors) is untested.
+
+---
+
+## v2 endpoint-monitoring tests
+
+### Backend (total now 81; 33 added for v2)
+
+| Module | Tests | Covers |
+|---|---|---|
+| `test_endpoint_detection.py` | 17 | Command indicators; Windows & Linux rules (brute force, suspicious commands, persistence, sensitive files, log clearing, rare external connections); score bounds; sparse-data pure-rule fallback; explanations |
+| `test_endpoint_api.py` | 13 | Auth required & role enforcement; `503` when tokens unconfigured; enrolment flow & token limits; bad-input rejection; device auth; ingest + **dedup** + detection; batch limits; **redaction on ingest**; event filters & live polling; heartbeat/health; **rotation & revocation**; endpoint alerts separate from access-log alerts |
+| `test_migrations.py` | 3 | Fresh upgrade to full schema (idempotent); **pre-Alembic v1 adoption without data loss**; partial-schema refused |
+
+### Agent (`agent/tests`, 26 tests)
+
+| Module | Tests | Covers |
+|---|---|---|
+| `test_buffer.py` | 7 | Add/peek/ack; dedup on uid; **persistence across reopen**; FIFO order; **bounded size drops oldest**; safe ack of unknown |
+| `test_redaction.py` | 11 | Passwords, DB flags (mysql `-p`, sqlcmd `-P`), connection strings, API keys, bearer tokens, `net user`, private-key blocks; benign text unchanged; redact-by-key; in-place event redaction |
+| `test_models_and_collectors.py` | 8 | Event uid stability & device scoping; payload shape; collector availability reasons; **the other platform's collectors report `unsupported`**; broken collector never raises; checkpoint persistence; HTTPS enforcement |
+
+### Latest results
+
+| Check | Result |
+|---|---|
+| `server` pytest | **81 passed** |
+| `agent` pytest | **26 passed** |
+| `tsc --noEmit` | 0 errors |
+| `eslint .` | 0 errors, 0 warnings |
+| `next build` | Success; 9 routes prerendered |
+
+### Live end-to-end verification
+
+- Full agent↔API flow (enrol → send → detect → correlate → alert → resolve;
+  rotation; revocation; dedup; redaction) — 28 assertions, all pass.
+- Windows collectors on this host: Security, System, Sysmon, PowerShell and
+  process collectors all returned real events.
+- Linux collectors in Ubuntu WSL: journald auth, `/proc`, `ss` all returned real events.
+- Dashboard: endpoint inventory, device detail (collector health), live events,
+  event detail with timeline, endpoint alerts with correlation, RBAC gating —
+  all verified in the browser.
+
+### Bugs found and fixed (v2)
+
+| Bug | Cause | Fix |
+|---|---|---|
+| Endpoint rules never alerted with few events | `risk = 0.6 × rule` diluted scores below threshold when ML unfitted | Sparse-data path uses pure rule score |
+| `sqlcmd -P` password not redacted | Flag not in redaction list | Added sqlcmd/osql `-P` pattern (agent + server) |
+| Windows event-log collectors returned 0 events | `wevtutil /f:xml` emits all records on one line; line-based split produced one unparseable blob | Split on `<Event>…</Event>` with a regex |
+| Security collector crashed | `os.path.basename(None)` on empty XML elements | Null-safe `_base()` helper |
+| Dashboard CSS failed to load (dev) | Turbopack root inferred from an unrelated lockfile | Pinned `turbopack.root` in `next.config.ts` |

@@ -118,3 +118,69 @@ changes, so the bundled docs in `node_modules/next/dist/docs/` were consulted.
    that was not available during development; the team chose to develop and
    test on SQLite and switch by editing `LOGNEXA_DATABASE_URL`. The schema uses
    only portable types, but a PostgreSQL run is still pending.
+
+---
+
+# v2.0.0 — Cross-platform endpoint monitoring
+
+Upgraded the access-log prototype into a cross-platform endpoint monitoring
+system without breaking v1 features or resetting data.
+
+## Status summary (v2)
+
+| Feature | Status |
+|---|---|
+| Alembic migrations (0001 baseline, 0002 endpoint); v1 auto-adoption | ✅ Completed, tested |
+| Endpoint ORM models + schemas (devices, tokens, heartbeats, events; alerts extended) | ✅ Completed |
+| Device enrolment, per-device credentials, rotation, revocation | ✅ Completed, tested |
+| Dashboard RBAC (analyst/admin bearer tokens) | ✅ Completed, tested |
+| Agent API (`/agent/enroll|heartbeat|events|rotate-credentials`) | ✅ Completed, tested |
+| Endpoint detection (15 EP rules + Isolation Forest) + correlation | ✅ Completed, tested |
+| Server + agent redaction (defence in depth) | ✅ Completed, tested |
+| Windows agent + collectors (Security/System/Sysmon/PowerShell/CIM) | ✅ Completed, verified on host |
+| Linux agent + collectors (journald/auth.log, /proc, ss, FIM) | ✅ Completed, verified in WSL |
+| Durable buffer (persistence, dedup, checkpoints, bounds, retries, backoff) | ✅ Completed, tested |
+| Service installers (systemd unit, Windows PowerShell) | ✅ Completed (installers not executed in CI) |
+| Dashboard: endpoints, live events, enrolment, event timeline, endpoint alerts | ✅ Completed, verified in browser |
+| Tests: 33 backend + 26 agent added | ✅ Completed, passing |
+| Docs + README rewrite | ✅ Completed |
+| PostgreSQL end-to-end run | ⏳ Pending — verified on SQLite only |
+| macOS agent | ❌ Out of scope |
+
+## Files added (v2)
+
+- `server/migrations/` (alembic.ini, env.py, versions 0001/0002), `server/app/migrations.py`, `server/scripts/migrate.py`
+- `server/app/security.py`, `server/app/endpoint_schemas.py`
+- `server/app/services/{endpoint_detection,endpoint_service,redaction}.py`
+- `server/app/routers/{agent,endpoints}.py`
+- `server/tests/{test_endpoint_detection,test_endpoint_api,test_migrations}.py`
+- `agent/` — full agent package, `deploy/` installers, `tests/`, `pyproject.toml`, config examples
+- `client/components/{auth,endpoint-badges,device-detail-sheet,endpoint-event-sheet}.tsx`
+- `client/app/{endpoints,events,enrollment}/page.tsx`
+- `docs/endpoint-monitoring.md`
+
+## Files modified (v2)
+
+- `server/app/models.py` (endpoint tables; alerts extended), `config.py` (endpoint/auth settings), `database.py` (init via migrations), `main.py` (routers, CORS Authorization), `schemas.py` (alert source), `services/ml.py` (feature param), `routers/{alerts,analytics,risk}.py` + `services/{pipeline,dataset}.py` (scope v1 alert ops to `source='access_log'`)
+- `client/lib/{api,types}.ts` (token auth + endpoint types/methods), `app/layout.tsx`, `components/app-shell.tsx` (nav groups, sign-in), `components/states.tsx`, `lib/format.ts`, `app/page.tsx` (endpoint summary), `app/alerts/page.tsx` (endpoint alerts), `next.config.ts` (turbopack root)
+- `requirements.txt` (alembic), `.env` examples
+
+## Key design decisions (v2)
+
+| Decision | Reason |
+|---|---|
+| Alembic with batch mode + programmatic adoption | Migrate without resetting; adopt pre-Alembic v1 DBs; works on SQLite & PostgreSQL |
+| One `alerts` table for both sources | Reuses the existing triage workflow and UI; `source` discriminates |
+| Agent uses only the standard library | Deployable on locked-down hosts with no pip access; httpx optional |
+| Per-device hashed credentials | A DB leak never exposes usable agent credentials |
+| Content-hash `event_uid`, unique per device | At-least-once delivery with no duplicate rows; safe retries |
+| Two-layer redaction | A stale/misconfigured agent still can't persist secrets |
+| Pure-rules fallback when ML unfitted | New/low-volume devices still alert on strong indicators |
+| Correlation into incidents | Fewer, richer alerts instead of one per raw event |
+
+## Challenges and solutions (v2)
+
+See the v2 bug table in [testing.md](testing.md): the diluted sparse-data score,
+the `wevtutil` single-line XML split, the null-safe basename, the sqlcmd `-P`
+redaction, and the Turbopack root resolution were all found by automated tests or
+live verification and fixed.

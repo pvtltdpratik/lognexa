@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import init_db
 from app.errors import register_error_handlers
-from app.routers import alerts, analysis, analytics, logs, risk
+from app.routers import agent, alerts, analysis, analytics, endpoints, logs, risk
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 settings = get_settings()
@@ -30,18 +30,22 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
-    description="AI-driven access-log auditing and anomaly detection (student prototype, synthetic data).",
+    description=(
+        "AI-driven access-log auditing and cross-platform endpoint monitoring "
+        "(student prototype). Agent endpoints live under /agent; endpoint telemetry APIs "
+        "require an analyst or admin bearer token."
+    ),
     lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 register_error_handlers(app)
 
-for r in (analytics.router, logs.router, alerts.router, risk.router, analysis.router):
+for r in (analytics.router, logs.router, alerts.router, risk.router, analysis.router, endpoints.router, agent.router):
     app.include_router(r)
 
 

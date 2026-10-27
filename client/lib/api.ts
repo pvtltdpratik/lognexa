@@ -1,5 +1,12 @@
 import type {
   AccessLog,
+  Device,
+  DeviceDetail,
+  EndpointEvent,
+  EndpointEventDetail,
+  EndpointOverview,
+  EnrollmentToken,
+  EnrollmentTokenCreated,
   AccessLogDetail,
   Alert,
   AlertDetail,
@@ -44,12 +51,46 @@ function buildUrl(path: string, query?: Query) {
   return url.toString()
 }
 
+const TOKEN_KEY = "lognexa.token"
+
+/** Analyst/admin bearer token for endpoint-monitoring APIs, kept per browser. */
+export const auth = {
+  get(): string | null {
+    try {
+      return localStorage.getItem(TOKEN_KEY)
+    } catch {
+      return null
+    }
+  },
+  set(token: string | null) {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token)
+      else localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      /* storage unavailable (private mode) */
+    }
+    listeners.forEach((l) => l())
+  },
+  subscribe(fn: () => void) {
+    listeners.add(fn)
+    return () => {
+      listeners.delete(fn)
+    }
+  },
+}
+const listeners = new Set<() => void>()
+
 async function request<T>(path: string, init?: RequestInit & { query?: Query }): Promise<T> {
   let res: Response
+  const token = auth.get()
   try {
     res = await fetch(buildUrl(path, init?.query), {
       ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
       cache: "no-store",
     })
   } catch {
@@ -94,4 +135,20 @@ export const api = {
   runs: (limit = 10) => request<AnalysisRun[]>("/analyze/runs", { query: { limit } }),
   generateDataset: (body: DatasetInput) =>
     request<DatasetResult>("/dataset/generate", { method: "POST", body: JSON.stringify({ ...body, run_analysis: true }) }),
+
+  // --- endpoint monitoring (require an analyst/admin token) ---
+  me: () => request<{ role: "analyst" | "admin" }>("/auth/me"),
+  endpointOverview: () => request<EndpointOverview>("/endpoint/overview"),
+  devices: (query: Query = {}) => request<Device[]>("/devices", { query }),
+  device: (id: number) => request<DeviceDetail>(`/devices/${id}`),
+  revokeDevice: (id: number, reason: string) =>
+    request<Device>(`/devices/${id}/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
+  rotateDevice: (id: number) => request<Device>(`/devices/${id}/rotate`, { method: "POST" }),
+  endpointEvents: (query: Query) => request<Page<EndpointEvent>>("/endpoint-events", { query }),
+  endpointEvent: (id: number) => request<EndpointEventDetail>(`/endpoint-events/${id}`),
+  enrollmentTokens: () => request<EnrollmentToken[]>("/enrollment-tokens"),
+  createEnrollmentToken: (body: { label: string; max_uses: number; expires_in_hours: number }) =>
+    request<EnrollmentTokenCreated>("/enrollment-tokens", { method: "POST", body: JSON.stringify(body) }),
+  revokeEnrollmentToken: (id: number) =>
+    request<EnrollmentToken>(`/enrollment-tokens/${id}/revoke`, { method: "POST" }),
 }

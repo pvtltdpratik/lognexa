@@ -145,8 +145,8 @@ def run_analysis(db: Session, params: AnalysisParams) -> AnalysisRun:
 
         db.execute(delete(RiskScore))
         # Open alerts are regenerated; acknowledged / resolved alerts are kept as history.
-        db.execute(delete(Alert).where(Alert.status == "open"))
-        kept = set(db.scalars(select(Alert.log_id)).all())
+        db.execute(delete(Alert).where(Alert.status == "open", Alert.source == "access_log"))
+        kept = set(db.scalars(select(Alert.log_id).where(Alert.log_id.is_not(None))).all())
 
         risk_rows, alert_rows = [], []
         for row in scored.itertuples(index=False):

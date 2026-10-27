@@ -177,3 +177,51 @@ Audit trail of every analysis.
 
 See `server/scripts/init_postgres.sql` and
 [setup-and-deployment.md](setup-and-deployment.md).
+
+---
+
+## v2 endpoint-monitoring tables
+
+Added by Alembic migration `0002` (see [endpoint-monitoring.md](endpoint-monitoring.md)).
+Migration `0001` is the v1 baseline; a pre-Alembic v1 database is adopted
+(stamped at `0001`) and upgraded without data loss.
+
+### `enrollment_tokens`
+Limited-use enrolment secrets. Only `token_hash` (SHA-256) and a short
+`token_prefix` are stored; the plaintext is shown once. Columns: `label`,
+`max_uses`, `uses`, `revoked`, `expires_at`.
+
+### `devices`
+An enrolled endpoint. Key columns: `device_uid` (unique), `hostname`, `os_type`
+(windows/linux), `os_version`, `agent_version`, `machine_id`, `ip_address`,
+`status` (active/revoked), `credential_hash` (SHA-256 of the device secret),
+`credential_issued_at`, `rotation_requested`, `last_seen_at`, `health` (JSON:
+latest heartbeat), `revoked_at`, `revoked_reason`, `enrollment_token_id`.
+
+### `device_heartbeats`
+Rolling health snapshots per device (`received_at`, `payload` JSON). Pruned to the
+most recent N per device.
+
+### `endpoint_events`
+Normalised telemetry. `(device_id, event_uid)` is unique → server-side
+deduplication. Collected fields: `timestamp`, `os_type`, `source`, `category`,
+`event_type`, `username`, `process_name/path`, `command_line`, `pid`,
+`parent_process/pid`, `src_ip`, `dst_ip`, `dst_port`, `file_path`, `message`,
+`raw` (JSON), `redacted`. Detection fields (null until scored): `rule_score`,
+`ml_score`, `ml_is_anomaly`, `risk_score`, `severity`, `triggered_rules` (JSON),
+`explanation`, `scored_at`.
+
+### `alerts` (extended)
+`source` ('access_log' | 'endpoint'; existing rows default to 'access_log');
+`log_id` / `user_id` made nullable; added `device_id`, `endpoint_event_id`
+(unique), `correlation_key`, `event_count`, `related_event_ids` (JSON). An
+endpoint alert aggregates correlated events into one incident.
+
+```mermaid
+erDiagram
+    enrollment_tokens ||--o{ devices : "enrols"
+    devices ||--o{ device_heartbeats : "reports"
+    devices ||--o{ endpoint_events : "collects"
+    devices ||--o{ alerts : "endpoint alerts"
+    endpoint_events ||--o| alerts : "primary event"
+```

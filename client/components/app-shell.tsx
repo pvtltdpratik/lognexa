@@ -5,13 +5,17 @@ import {
   BellRingIcon,
   BrainCircuitIcon,
   GaugeIcon,
+  LaptopIcon,
   LayoutDashboardIcon,
+  ListTreeIcon,
   ScrollTextIcon,
+  ShieldIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import * as React from "react"
 
+import { SignInButton } from "@/components/auth"
 import { Wordmark } from "@/components/brand/logo"
 import { ThemeToggle } from "@/components/theme-provider"
 import { Separator } from "@/components/ui/separator"
@@ -36,13 +40,30 @@ import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-const NAV = [
-  { href: "/", label: "Overview", icon: LayoutDashboardIcon },
-  { href: "/logs", label: "Access logs", icon: ScrollTextIcon },
-  { href: "/alerts", label: "Alerts", icon: BellRingIcon },
-  { href: "/risk", label: "Risk scores", icon: GaugeIcon },
-  { href: "/analysis", label: "Analysis & data", icon: BrainCircuitIcon },
+const NAV_GROUPS = [
+  {
+    label: "Access log auditing",
+    items: [
+      { href: "/", label: "Overview", icon: LayoutDashboardIcon },
+      { href: "/logs", label: "Access logs", icon: ScrollTextIcon },
+      { href: "/risk", label: "Risk scores", icon: GaugeIcon },
+      { href: "/analysis", label: "Analysis & data", icon: BrainCircuitIcon },
+    ],
+  },
+  {
+    label: "Endpoint monitoring",
+    items: [
+      { href: "/endpoints", label: "Endpoints", icon: LaptopIcon },
+      { href: "/events", label: "Live events", icon: ListTreeIcon },
+      { href: "/enrollment", label: "Enrolment", icon: ShieldIcon },
+    ],
+  },
+  {
+    label: "Triage",
+    items: [{ href: "/alerts", label: "Alerts", icon: BellRingIcon }],
+  },
 ]
+const NAV = NAV_GROUPS.flatMap((g) => g.items)
 
 function HealthIndicator() {
   const { data, error, loading } = useApi(() => api.health(), [])
@@ -80,25 +101,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {NAV.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={item === current}
-                      tooltip={item.label}
-                      render={<Link href={item.href} />}
-                    >
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        isActive={item === current}
+                        tooltip={item.label}
+                        render={<Link href={item.href} />}
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-3 text-[0.65rem] leading-relaxed text-muted-foreground group-data-[collapsible=icon]:hidden">
           <span className="flex items-center gap-1.5 font-semibold tracking-widest uppercase">
@@ -115,6 +138,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-base font-semibold tracking-tight">{current?.label ?? "Lognexa"}</h1>
           <div className="ml-auto flex items-center gap-3">
             <HealthIndicator />
+            <SignInButton />
             <ThemeToggle />
           </div>
         </header>

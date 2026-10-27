@@ -1,0 +1,24 @@
+{
+  "server_url": "https://lognexa.example.com:8000",
+  "verify_tls": true,
+  "poll_interval": 15.0,
+  "heartbeat_interval": 60.0,
+  "send_interval": 10.0,
+  "batch_size": 500,
+  "max_buffer_events": 200000,
+  "log_level": "INFO",
+  "insecure_http_ok": false,
+  "collectors": {
+    "windows_security": true,
+    "windows_system": true,
+    "windows_sysmon": true,
+    "windows_powershell": true,
+    "windows_process": true,
+    "linux_auth": true,
+    "linux_process": true,
+    "linux_network": true,
+    "linux_file": true
+  },
+  "_comment_verify_tls": "true verifies against system CAs; or set a path to a CA bundle file; false disables verification (not recommended).",
+  "_comment_enroll_token": "Provide the enrolment token via the LOGNEXA_ENROLL_TOKEN environment variable or `lognexa-agent run --token ...` on first start; it is not stored in this file."
+}

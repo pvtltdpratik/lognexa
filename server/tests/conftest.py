@@ -67,3 +67,62 @@ def empty_client(session_factory):
         yield c
     app.dependency_overrides.clear()
     engine.dispose()
+
+
+# --- endpoint monitoring fixtures ---------------------------------------------
+ADMIN_TOKEN = "test-admin-token"
+ANALYST_TOKEN = "test-analyst-token"
+
+
+@pytest.fixture(scope="module")
+def endpoint_env():
+    """Configure auth tokens by refreshing the cached Settings (env + cache clear)."""
+    import os
+
+    from app.config import get_settings
+
+    os.environ["LOGNEXA_ADMIN_TOKEN"] = ADMIN_TOKEN
+    os.environ["LOGNEXA_ANALYST_TOKEN"] = ANALYST_TOKEN
+    os.environ["LOGNEXA_AGENT_REQUIRE_HTTPS"] = "false"  # TestClient is plain http loopback
+    get_settings.cache_clear()
+    yield get_settings()
+    for key in ("LOGNEXA_ADMIN_TOKEN", "LOGNEXA_ANALYST_TOKEN", "LOGNEXA_AGENT_REQUIRE_HTTPS"):
+        os.environ.pop(key, None)
+    get_settings.cache_clear()
+
+
+@pytest.fixture(scope="module")
+def ep_client(session_factory, endpoint_env):
+    """Client on a dedicated DB with auth configured, plus header helpers."""
+    engine = make_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+    def _get_db():
+        db = factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _get_db
+    with TestClient(app) as c:
+        c.admin = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+        c.analyst = {"Authorization": f"Bearer {ANALYST_TOKEN}"}
+        yield c
+    app.dependency_overrides.clear()
+    engine.dispose()
+
+
+@pytest.fixture
+def enrolled_device(ep_client):
+    """Create a token, enrol a Windows device, return (headers, device_uid, info)."""
+    r = ep_client.post("/enrollment-tokens", headers=ep_client.admin,
+                       json={"label": "test", "max_uses": 10, "expires_in_hours": 1})
+    token = r.json()["token"]
+    enr = ep_client.post("/agent/enroll", json={
+        "token": token, "hostname": "unit-host", "os_type": "windows",
+        "os_version": "Windows 11", "agent_version": "2.0.0", "machine_id": "UNIT-MACHINE-1",
+    }).json()
+    cred = {"Authorization": f"Bearer {enr['credential']}"}
+    return cred, enr["device_uid"], enr

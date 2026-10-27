@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+# Agent runtime data (credentials, buffer, checkpoints) — never commit
+*.db
+state.json
+config.json
+.venv/

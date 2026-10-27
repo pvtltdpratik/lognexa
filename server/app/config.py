@@ -15,13 +15,31 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "Lognexa API"
-    version: str = "1.0.0"
+    version: str = "2.0.0"
     database_url: str = Field(
         default="postgresql+psycopg2://lognexa:change-me@localhost:5432/lognexa",
         description="SQLAlchemy database URL",
     )
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     random_seed: int = 42
+
+    # --- endpoint monitoring / access control ------------------------------------
+    # Bearer tokens for humans using the dashboard. Empty = that role is disabled;
+    # endpoint APIs fail closed (503) when neither token is configured.
+    admin_token: str = Field(default="", repr=False)
+    analyst_token: str = Field(default="", repr=False)
+    # Reject agent traffic over plain HTTP unless it comes from the loopback interface.
+    agent_require_https: bool = True
+    # Honour X-Forwarded-Proto / X-Forwarded-For (only behind a trusted TLS proxy).
+    trust_proxy_headers: bool = False
+    heartbeat_interval_seconds: int = Field(default=60, ge=10, le=3600)
+    # A device is "stale" after 3 missed heartbeats and "offline" after 10.
+    stale_after_seconds: int = Field(default=180, ge=30)
+    offline_after_seconds: int = Field(default=600, ge=60)
+    max_events_per_batch: int = Field(default=500, ge=1, le=5000)
+    heartbeats_kept_per_device: int = Field(default=200, ge=10)
+    endpoint_alert_threshold: float = Field(default=50.0, ge=1, le=100)
+    correlation_window_minutes: int = Field(default=30, ge=1, le=1440)
 
     @field_validator("database_url")
     @classmethod

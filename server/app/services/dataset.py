@@ -13,8 +13,12 @@ from app.services.synthetic import Dataset, generate_dataset
 
 
 def reset_and_load(db: Session, dataset: Dataset) -> dict:
-    """Replace all data with ``dataset``. Destructive by design (demo data only)."""
-    for model in (Alert, RiskScore, AnalysisRun, AccessLog, User):
+    """Replace the synthetic access-log data with ``dataset``.
+
+    Destructive for synthetic demo data only: endpoint devices, telemetry and
+    endpoint alerts are never touched."""
+    db.execute(delete(Alert).where(Alert.source == "access_log"))
+    for model in (RiskScore, AnalysisRun, AccessLog, User):
         db.execute(delete(model))
     db.bulk_insert_mappings(User, dataset.users)
     db.bulk_insert_mappings(AccessLog, dataset.logs)

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 Severity = Literal["low", "medium", "high", "critical"]
 AlertStatus = Literal["open", "acknowledged", "resolved"]
+AlertSource = Literal["access_log", "endpoint"]
 LogStatus = Literal["success", "failure", "denied"]
 Action = Literal["login", "logout", "file_read", "file_write", "download", "admin_action"]
 Sensitivity = Literal["public", "internal", "confidential", "restricted"]
@@ -147,9 +148,20 @@ class AccessLogDetail(AccessLogOut):
 
 # --- alerts ----------------------------------------------------------------
 class AlertOut(ORM):
+    """Access-log and endpoint alerts share this shape. For endpoint alerts
+    ``username`` is the account involved (or the hostname), ``resource`` a short
+    summary of the primary event and ``ip_address`` its remote/source address."""
+
     id: int
-    log_id: int
-    user_id: int
+    source: AlertSource = "access_log"
+    log_id: int | None
+    user_id: int | None
+    device_id: int | None = None
+    hostname: str | None = None
+    os_type: str | None = None
+    endpoint_event_id: int | None = None
+    event_count: int = 1
+    correlation_key: str | None = None
     username: str
     severity: Severity
     risk_score: float
@@ -163,12 +175,15 @@ class AlertOut(ORM):
     updated_at: datetime
     timestamp: datetime
     resource: str
-    ip_address: str
+    ip_address: str | None
 
 
 class AlertDetail(AlertOut):
-    log: AccessLogOut
+    log: AccessLogOut | None = None
     risk: RiskScoreOut | None = None
+    # Endpoint alerts: primary event and every correlated event (see endpoint_schemas)
+    endpoint_event: dict | None = None
+    related_events: list[dict] = []
 
 
 class AlertUpdate(BaseModel):

@@ -1,0 +1,38 @@
+# systemd unit for the Lognexa endpoint agent (Linux).
+# Install:
+#   sudo cp deploy/lognexa-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now lognexa-agent
+#
+# Runs as a dedicated, unprivileged 'lognexa' user by default. To read the
+# journal, add that user to the systemd-journal group:
+#   sudo useradd -r -s /usr/sbin/nologin lognexa
+#   sudo usermod -aG systemd-journal,adm lognexa
+
+[Unit]
+Description=Lognexa endpoint monitoring agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lognexa
+Group=lognexa
+# Enrolment token is read once from this environment file, then persisted as a
+# per-device credential under StateDirectory. Remove the token afterwards.
+EnvironmentFile=-/etc/lognexa/agent.env
+Environment=LOGNEXA_AGENT_DATA_DIR=/var/lib/lognexa-agent
+ExecStart=/opt/lognexa-agent/venv/bin/lognexa-agent run
+Restart=always
+RestartSec=10
+StateDirectory=lognexa-agent
+# Least privilege hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/lognexa-agent
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,7 @@
 
 export type Severity = "low" | "medium" | "high" | "critical"
 export type AlertStatus = "open" | "acknowledged" | "resolved"
+// AlertSource defined in the endpoint section below
 
 export interface Page<T> {
   items: T[]
@@ -96,8 +97,15 @@ export interface AccessLogDetail extends AccessLog {
 
 export interface Alert {
   id: number
-  log_id: number
-  user_id: number
+  source: AlertSource
+  log_id: number | null
+  user_id: number | null
+  device_id?: number | null
+  hostname?: string | null
+  os_type?: string | null
+  endpoint_event_id?: number | null
+  event_count?: number
+  correlation_key?: string | null
   username: string
   severity: Severity
   risk_score: number
@@ -115,8 +123,10 @@ export interface Alert {
 }
 
 export interface AlertDetail extends Alert {
-  log: AccessLog
+  log: AccessLog | null
   risk: RiskScore | null
+  endpoint_event?: (EndpointEvent & { triggered_rules: TriggeredRule[]; explanation: string | null; rule_score: number | null; ml_score: number | null; ml_is_anomaly: boolean | null }) | null
+  related_events?: EndpointEvent[]
 }
 
 export interface Prf {
@@ -205,4 +215,132 @@ export interface DatasetResult {
   logs: number
   injected_anomalies: number
   analysis: AnalysisRun | null
+}
+
+// --- endpoint monitoring ---------------------------------------------------
+export type OsType = "windows" | "linux"
+export type Connection = "online" | "stale" | "offline" | "never" | "revoked"
+export type AlertSource = "access_log" | "endpoint"
+
+export interface CollectorHealth {
+  name: string
+  status: "ok" | "unsupported" | "permission_denied" | "error" | "disabled"
+  detail: string | null
+  events_collected: number
+  last_run_at: string | null
+}
+
+export interface Device {
+  id: number
+  device_uid: string
+  hostname: string
+  os_type: OsType
+  os_version: string
+  agent_version: string
+  ip_address: string | null
+  status: "active" | "revoked"
+  connection: Connection
+  enrolled_at: string
+  last_seen_at: string | null
+  rotation_requested: boolean
+  credential_issued_at: string
+  revoked_at: string | null
+  revoked_reason: string | null
+  collectors: CollectorHealth[]
+  buffer_pending: number | null
+  is_privileged: boolean | null
+  events_24h: number
+  open_alerts: number
+  max_risk_24h: number | null
+}
+
+export interface HeartbeatPoint {
+  received_at: string
+  buffer_pending: number | null
+  send_failures: number | null
+  collectors_ok: number
+  collectors_total: number
+}
+
+export interface DeviceDetail extends Device {
+  heartbeats: HeartbeatPoint[]
+  category_counts: Record<string, number>
+}
+
+export interface EndpointEvent {
+  id: number
+  device_id: number
+  hostname: string
+  os_type: OsType
+  timestamp: string
+  received_at: string
+  source: string
+  category: string
+  event_type: string
+  username: string | null
+  process_name: string | null
+  command_line: string | null
+  pid: number | null
+  src_ip: string | null
+  dst_ip: string | null
+  dst_port: number | null
+  file_path: string | null
+  message: string | null
+  risk_score: number | null
+  severity: Severity | null
+  rule_codes: string[]
+  alert_id: number | null
+}
+
+export interface EndpointEventDetail extends EndpointEvent {
+  process_path: string | null
+  parent_process: string | null
+  parent_pid: number | null
+  raw: Record<string, unknown> | null
+  redacted: boolean
+  rule_score: number | null
+  ml_score: number | null
+  ml_is_anomaly: boolean | null
+  triggered_rules: TriggeredRule[]
+  explanation: string | null
+  device: { id: number; hostname: string; os_type: OsType; device_uid: string }
+  related: EndpointEvent[]
+}
+
+export interface EndpointOverview {
+  devices_total: number
+  devices_by_os: Record<string, number>
+  devices_by_connection: Record<string, number>
+  events_24h: number
+  events_total: number
+  open_endpoint_alerts: number
+  severity_counts_24h: Record<Severity, number>
+  category_counts_24h: Record<string, number>
+  collector_issues: { device_id: number; hostname: string; collector: string; status: string; detail: string | null }[]
+  hourly: { hour: string; events: number; flagged: number }[]
+}
+
+export interface EnrollmentToken {
+  id: number
+  label: string
+  token_prefix: string
+  max_uses: number
+  uses: number
+  revoked: boolean
+  expires_at: string
+  created_at: string
+}
+export interface EnrollmentTokenCreated extends EnrollmentToken {
+  token: string
+}
+
+// Endpoint fields added to the shared Alert type
+export interface EndpointAlertFields {
+  source: AlertSource
+  device_id: number | null
+  hostname: string | null
+  os_type: string | null
+  endpoint_event_id: number | null
+  event_count: number
+  correlation_key: string | null
 }

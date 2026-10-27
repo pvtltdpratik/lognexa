@@ -40,8 +40,8 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db(bind: Engine | None = None) -> None:
-    # Import models so they register on Base.metadata before create_all.
-    from app import models  # noqa: F401
+def init_db(bind: Engine | None = None) -> str:
+    """Apply Alembic migrations (never drops data). Returns the action taken."""
+    from app.migrations import upgrade_database
 
-    Base.metadata.create_all(bind=bind or engine)
+    return upgrade_database(bind or engine)

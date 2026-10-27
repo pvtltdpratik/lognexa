@@ -75,6 +75,7 @@ lognexa/
 | [architecture.md](architecture.md) | System architecture, data flow, diagrams |
 | [database-schema.md](database-schema.md) | Tables, columns, relationships, ER diagram |
 | [api-reference.md](api-reference.md) | Endpoints, examples, validation rules |
+| [endpoint-monitoring.md](endpoint-monitoring.md) | Cross-platform endpoint agents, collection, security, correlation (v2) |
 | [ml-methodology.md](ml-methodology.md) | Features, rules, Isolation Forest, risk formula, evaluation |
 | [implementation-log.md](implementation-log.md) | Work completed, decisions, challenges |
 | [testing.md](testing.md) | Test cases, results, bugs and fixes |

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import AccessLog, Alert, AnalysisRun, RiskScore, User
+from app.models import AccessLog, Alert, AnalysisRun, Device, EndpointEvent, RiskScore, User
 from app.routers.risk import top_users
 from app.schemas import AnalysisRunOut, Health, Overview, UserOut
 from app.services.rules import RULES_BY_CODE
@@ -28,6 +28,8 @@ def health(db: Session = Depends(get_db)):
             "logs": db.scalar(select(func.count(AccessLog.id))) or 0,
             "risk_scores": db.scalar(select(func.count(RiskScore.id))) or 0,
             "alerts": db.scalar(select(func.count(Alert.id))) or 0,
+            "devices": db.scalar(select(func.count(Device.id))) or 0,
+            "endpoint_events": db.scalar(select(func.count(EndpointEvent.id))) or 0,
         }
         return Health(status="ok", database="ok", database_backend=backend, version=settings.version, counts=counts)
     except SQLAlchemyError as exc:
@@ -45,10 +47,11 @@ def list_users(db: Session = Depends(get_db)):
 @router.get("/analytics/overview", response_model=Overview, summary="Dashboard statistics")
 def overview(db: Session = Depends(get_db)):
     total_logs = db.scalar(select(func.count(AccessLog.id))) or 0
-    alert_status = dict(db.execute(select(Alert.status, func.count()).group_by(Alert.status)).all())
+    v1 = Alert.source == "access_log"
+    alert_status = dict(db.execute(select(Alert.status, func.count()).where(v1).group_by(Alert.status)).all())
     sev = dict(db.execute(select(RiskScore.severity, func.count()).group_by(RiskScore.severity)).all())
     alert_sev = dict(
-        db.execute(select(Alert.severity, func.count()).where(Alert.status != "resolved").group_by(Alert.severity)).all()
+        db.execute(select(Alert.severity, func.count()).where(Alert.status != "resolved", v1).group_by(Alert.severity)).all()
     )
 
     # Rule hit frequency (JSON column aggregated in Python for DB portability).

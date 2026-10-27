@@ -6,6 +6,7 @@ import {
   BrainCircuitIcon,
   DatabaseIcon,
   GaugeIcon,
+  LaptopIcon,
   ShieldXIcon,
   UsersIcon,
 } from "lucide-react"
@@ -20,6 +21,7 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useAuth } from "@/components/auth"
 import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/api"
 import { SEVERITIES, formatDay, formatShort, nf, pct, severityColor, severityLabel } from "@/lib/format"
@@ -236,14 +238,45 @@ function Dashboard({ data }: { data: Overview }) {
   )
 }
 
+function EndpointSummary() {
+  const { signedIn } = useAuth()
+  const { data } = useApi(() => (signedIn ? api.endpointOverview() : Promise.resolve(null)), [signedIn])
+  if (!data || data.devices_total === 0) return null
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><LaptopIcon className="size-4 text-primary" /> Endpoint monitoring</CardTitle>
+        <CardDescription>{data.devices_total} enrolled device(s) across Windows and Linux.</CardDescription>
+        <CardAction>
+          <Link href="/endpoints" className={buttonVariants({ variant: "outline", size: "xs" })}>View endpoints</Link>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: "Online", value: data.devices_by_connection.online ?? 0 },
+          { label: "Events 24h", value: data.events_24h.toLocaleString() },
+          { label: "Open alerts", value: data.open_endpoint_alerts },
+          { label: "Collector issues", value: data.collector_issues.length },
+        ].map((s) => (
+          <div key={s.label} className="border p-2 text-center">
+            <div className="tabular font-heading text-xl font-semibold">{s.value}</div>
+            <div className="text-[0.65rem] tracking-widest text-muted-foreground uppercase">{s.label}</div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function OverviewPage() {
   const { data, error, loading, reload } = useApi(() => api.overview(), [])
   return (
     <>
       <PageIntro
         title="Security overview"
-        description="Behavioural risk across all synthetic access events, combining explainable rules with an Isolation Forest model."
+        description="Behavioural risk across synthetic access logs and live endpoint telemetry."
       />
+      <EndpointSummary />
       {!!error && <ErrorState error={error} onRetry={reload} />}
       {loading && !data && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

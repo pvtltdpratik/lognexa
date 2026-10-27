@@ -3,6 +3,7 @@ import { IBM_Plex_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/components/auth";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,7 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <TooltipProvider>
             <Toaster>
-              <AppShell>{children}</AppShell>
+              <AuthProvider>
+                <AppShell>{children}</AppShell>
+              </AuthProvider>
             </Toaster>
           </TooltipProvider>
         </ThemeProvider>
