@@ -286,6 +286,17 @@ sudo systemctl daemon-reload && sudo systemctl enable --now lognexa-agent
 
 ### Windows (startup task, elevated PowerShell)
 
+**Easiest — standalone release, no Python needed:** download
+`LognexaAgent-<version>-windows-x64.zip` from the
+[GitHub releases](https://github.com/pvtltdpratik/lognex/releases), unblock and
+extract it, then double-click `install-windows.cmd` and enter your server URL and
+enrolment token. The bundled `lognexa-agent.exe` (built with PyInstaller from
+`agent/launcher.py`) is installed instead of a Python environment. The build is
+not code-signed, so SmartScreen may ask you to confirm; verify the download
+against `SHA256SUMS` on the release page.
+
+**From a source checkout** (needs Python 3.9+ on PATH):
+
 ```powershell
 cd agent\deploy
 .\install-windows.ps1 -ServerUrl "https://your-server:8000" -EnrollToken "<token>"

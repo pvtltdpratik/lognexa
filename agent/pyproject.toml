@@ -1,6 +1,6 @@
 [project]
 name = "lognexa-agent"
-version = "2.1.0"
+version = "2.2.0"
 description = "Lognexa cross-platform endpoint monitoring agent (Windows and Linux)"
 requires-python = ">=3.9"
 # No required third-party dependencies: the agent uses only the standard library

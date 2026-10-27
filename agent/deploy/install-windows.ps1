@@ -29,16 +29,30 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
   throw "This installer must be run as Administrator (needed to read the Security event log and register a service)."
 }
 
-$python = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $python) { throw "Python 3.9+ is required on PATH." }
+$taskName = "LognexaAgent"
+# Stop a running agent first so its files can be replaced.
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+}
 
 Write-Host "Installing to $InstallDir"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item -Recurse -Force "$PSScriptRoot\..\*" $InstallDir -Exclude @("deploy")
-
-& $python -m venv "$InstallDir\venv"
-& "$InstallDir\venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
-& "$InstallDir\venv\Scripts\python.exe" -m pip install --quiet "$InstallDir"
+$bundledExe = Join-Path $PSScriptRoot "lognexa-agent.exe"
+if (Test-Path $bundledExe) {
+  # Standalone release: a self-contained executable, no Python required.
+  Copy-Item -Force $bundledExe "$InstallDir\lognexa-agent.exe"
+  $agentExe = "$InstallDir\lognexa-agent.exe"
+} else {
+  # Source checkout: install the package into a private virtual environment.
+  $python = (Get-Command python -ErrorAction SilentlyContinue).Source
+  if (-not $python) { throw "Python 3.9+ is required on PATH (or use the standalone release with lognexa-agent.exe)." }
+  Copy-Item -Recurse -Force "$PSScriptRoot\..\*" $InstallDir -Exclude @("deploy")
+  & $python -m venv "$InstallDir\venv"
+  & "$InstallDir\venv\Scripts\python.exe" -m pip install --quiet --upgrade pip
+  & "$InstallDir\venv\Scripts\python.exe" -m pip install --quiet "$InstallDir"
+  $agentExe = "$InstallDir\venv\Scripts\lognexa-agent.exe"
+}
 
 $dataDir = "$env:ProgramData\Lognexa\agent"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
@@ -65,13 +79,10 @@ Write-Host "Enrolling with the server..."
 $enrollArgs = @("--server", $ServerUrl)
 if ($allowHttp) { $enrollArgs += "--insecure-http" }
 $enrollArgs += @("enroll", "--token", $EnrollToken)
-& "$InstallDir\venv\Scripts\lognexa-agent.exe" @enrollArgs
+& $agentExe @enrollArgs
 if ($LASTEXITCODE -ne 0) {
   throw "Enrolment failed (exit $LASTEXITCODE). Check the server URL and that the token is valid and unused."
 }
-
-$taskName = "LognexaAgent"
-$exe = "$InstallDir\venv\Scripts\lognexa-agent.exe"
 
 # Clean up a service left by an older installer, and any previous task.
 if (Get-Service $taskName -ErrorAction SilentlyContinue) {
@@ -84,7 +95,7 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "Registering startup task '$taskName'..."
-$action    = New-ScheduledTaskAction -Execute $exe -Argument "run" -WorkingDirectory $dataDir
+$action    = New-ScheduledTaskAction -Execute $agentExe -Argument "run" -WorkingDirectory $dataDir
 $trigger   = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
