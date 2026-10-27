@@ -14,6 +14,7 @@ All three share one buffer and stop cleanly on SIGINT/SIGTERM.
 
 from __future__ import annotations
 
+import json
 import logging
 import platform
 import socket
@@ -26,7 +27,7 @@ from lognexa_agent.buffer import EventBuffer
 from lognexa_agent.client import ApiClient, ApiError
 from lognexa_agent.collectors import collectors_for_platform
 from lognexa_agent.config import AgentConfig, State, is_privileged
-from lognexa_agent.models import to_json, utcnow
+from lognexa_agent.models import fit_payload, to_json, utcnow
 from lognexa_agent.redaction import redact_event
 
 log = logging.getLogger("lognexa.agent")
@@ -68,6 +69,7 @@ class Agent:
         self._stop = threading.Event()
         self._started = time.monotonic()
         self._send_failures = 0
+        self._rejected = 0
         self._last_flush = None
         collector_classes = collectors_for_platform()
         self.collectors = []
@@ -138,13 +140,14 @@ class Agent:
                     if not batch:
                         break
                     uids = [u for u, _ in batch]
-                    events = [__import__("json").loads(p) for _, p in batch]
-                    self.client.send_events(events)
-                    self.buffer.ack(uids)
+                    # fit_payload also repairs events buffered by an older agent version.
+                    events = [fit_payload(json.loads(p)) for _, p in batch]
+                    rejected = self._deliver(uids, events)
                     self._last_flush = utcnow()
                     self._send_failures = 0
                     sent_any = True
-                    log.info("sent %d events (buffer=%d)", len(uids), self.buffer.pending())
+                    log.info("sent %d events, %d rejected (buffer=%d)",
+                             len(uids) - rejected, rejected, self.buffer.pending())
                 backoff = self.config.send_interval
             except ApiError as exc:
                 self._send_failures += 1
@@ -161,6 +164,41 @@ class Agent:
                 log.exception("sender cycle failed")
                 backoff = min(backoff * 2, 300)
             self._stop.wait(self.config.send_interval if sent_any else backoff)
+
+    def _deliver(self, uids: list[str], events: list[dict]) -> int:
+        """Send a batch and acknowledge it. Returns how many events were rejected.
+
+        If the server refuses the batch as invalid (422) or too large (413), the
+        batch is split in half and each half retried, down to single events. An
+        event the server still refuses is moved to ``rejected.jsonl`` and removed
+        from the buffer, so one bad event can never block everything behind it.
+        Other errors (network, 5xx, auth) propagate and the batch stays buffered.
+        """
+        try:
+            self.client.send_events(events)
+        except ApiError as exc:
+            if exc.status not in (413, 422):
+                raise
+            if len(events) > 1:
+                mid = len(events) // 2
+                return self._deliver(uids[:mid], events[:mid]) + self._deliver(uids[mid:], events[mid:])
+            self._quarantine(uids[0], events[0], exc)
+            self.buffer.ack(uids)
+            return 1
+        self.buffer.ack(uids)
+        return 0
+
+    def _quarantine(self, uid: str, event: dict, exc: ApiError) -> None:
+        self._rejected += 1
+        log.error("server rejected event %s (%s: %s); saved to rejected.jsonl", uid[:12], exc.code, exc.message)
+        path = self.config.data_dir / "rejected.jsonl"
+        try:
+            if path.exists() and path.stat().st_size > 5 * 1024 * 1024:
+                path.replace(path.with_suffix(".jsonl.1"))  # keep one old file
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(to_json({"event_uid": uid, "error": exc.code, "message": exc.message, "event": event}) + "\n")
+        except OSError:
+            log.exception("could not write rejected.jsonl")
 
     def _health_payload(self) -> dict:
         return {

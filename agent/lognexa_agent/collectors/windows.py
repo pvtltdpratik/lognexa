@@ -45,11 +45,17 @@ def _text(node, path):
     return el.text if el is not None else None
 
 
+# Windows records SystemTime with 100 ns precision (7 fractional digits), but
+# datetime.fromisoformat() before Python 3.11 accepts at most 6.
+_EXTRA_FRACTION = re.compile(r"(\.\d{6})\d+")
+
+
 def _parse_ts(value: str | None) -> datetime:
     if not value:
         return utcnow()
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+        iso = _EXTRA_FRACTION.sub(r"\1", value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(iso).astimezone(timezone.utc)
     except ValueError:
         return utcnow()
 
@@ -242,7 +248,9 @@ class WindowsProcessCollector(Collector):
 
         script = (
             "Get-CimInstance Win32_Process | "
-            "Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress"
+            "Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine,"
+            "@{n='Created';e={if ($_.CreationDate) { $_.CreationDate.ToUniversalTime().ToString('o') }}} | "
+            "ConvertTo-Json -Compress"
         )
         rc, out, err = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
         if rc != 0:
@@ -263,6 +271,7 @@ class WindowsProcessCollector(Collector):
                 continue
             events.append(Event(
                 source="cim", category="process", event_type="process_start",
+                timestamp=_parse_ts(p.get("Created")),  # real start time, not scan time
                 process_name=p.get("Name"), process_path=p.get("ExecutablePath"),
                 command_line=p.get("CommandLine"), pid=pid, parent_pid=p.get("ParentProcessId"),
                 dedup_key=f"{key}:{(p.get('CommandLine') or '')[:100]}",
