@@ -12,17 +12,26 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import logging.handlers
 import platform
 import signal
 import sys
+from pathlib import Path
 
 from lognexa_agent import __version__
 from lognexa_agent.config import AgentConfig, State, is_privileged
 
 
-def _setup_logging(level: str) -> None:
+def _setup_logging(level: str, log_file: str | None = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_file:
+        # Rotating so a long-running background agent can't fill the disk.
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"))
     logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+                        handlers=handlers, force=True)
 
 
 def _config(args) -> AgentConfig:
@@ -40,7 +49,7 @@ def cmd_run(args) -> int:
     from lognexa_agent.agent import Agent
 
     cfg = _config(args)
-    _setup_logging(cfg.log_level)
+    _setup_logging(cfg.log_level, cfg.log_file)
     agent = Agent(cfg)
 
     def _handle(_signum, _frame):
@@ -59,7 +68,7 @@ def cmd_enroll(args) -> int:
     from lognexa_agent.agent import Agent
 
     cfg = _config(args)
-    _setup_logging(cfg.log_level)
+    _setup_logging(cfg.log_level, cfg.log_file)
     agent = Agent(cfg)
     if agent.state.enrolled and not args.force:
         print(f"Already enrolled as device {agent.state.device_uid}. Use --force to re-enrol.")

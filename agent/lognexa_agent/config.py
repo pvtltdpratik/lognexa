@@ -36,6 +36,7 @@ class AgentConfig:
     max_buffer_events: int = 200_000
     collectors: dict[str, bool] = field(default_factory=dict)
     log_level: str = "INFO"
+    log_file: str | None = None  # also log here (rotating); needed when no console
     insecure_http_ok: bool = False  # allow plain http only for localhost dev
 
     @property
@@ -51,7 +52,8 @@ class AgentConfig:
         data: dict = {}
         cfg_path = Path(path) if path else (default_data_dir() / "config.json")
         if cfg_path.exists():
-            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            # utf-8-sig: tolerate a BOM written by Windows PowerShell 5.1 or Notepad.
+            data = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
         # Environment variables override the file.
         env = os.environ
         server = env.get("LOGNEXA_SERVER_URL", data.get("server_url", ""))
@@ -75,6 +77,7 @@ class AgentConfig:
             max_buffer_events=int(data.get("max_buffer_events", 200_000)),
             collectors=data.get("collectors", {}),
             log_level=env.get("LOGNEXA_AGENT_LOG_LEVEL", data.get("log_level", "INFO")),
+            log_file=env.get("LOGNEXA_AGENT_LOG_FILE", data.get("log_file")) or None,
             insecure_http_ok=bool(data.get("insecure_http_ok", False)) or env.get("LOGNEXA_AGENT_ALLOW_HTTP") == "1",
         )
 
@@ -90,7 +93,7 @@ class State:
         self.data: dict = {"device_uid": None, "credential": None, "checkpoints": {}}
         if path.exists():
             try:
-                self.data.update(json.loads(path.read_text(encoding="utf-8")))
+                self.data.update(json.loads(path.read_text(encoding="utf-8-sig")))
             except (ValueError, OSError):
                 pass
 

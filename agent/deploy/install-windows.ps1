@@ -1,10 +1,13 @@
 <#
 .SYNOPSIS
-  Install the Lognexa endpoint agent as a Windows service (auto-start).
+  Install the Lognexa endpoint agent to start automatically at boot.
 .DESCRIPTION
   Creates C:\Program Files\Lognexa Agent, a virtual environment, installs the
   agent, writes the config, enrols with the supplied token and registers a
-  service that restarts automatically. Run from an elevated PowerShell prompt.
+  "LognexaAgent" scheduled task that runs the agent as SYSTEM at startup and
+  restarts it on failure. (The agent is a console program, not a Windows
+  service, so it is hosted by Task Scheduler rather than the Service Control
+  Manager.) Run from an elevated PowerShell prompt.
 .EXAMPLE
   .\install-windows.ps1 -ServerUrl "https://lognexa.example.com:8000" -EnrollToken "lnx_..."
 .NOTES
@@ -39,6 +42,10 @@ Copy-Item -Recurse -Force "$PSScriptRoot\..\*" $InstallDir -Exclude @("deploy")
 
 $dataDir = "$env:ProgramData\Lognexa\agent"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+# state.json holds the device credential: restrict the folder to SYSTEM and
+# Administrators (SIDs, so this works on any Windows display language).
+icacls $dataDir /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not set permissions on $dataDir" }
 # Plain HTTP is accepted only for a localhost dev server (enforced by the client).
 # Enable it automatically for an http:// URL, or when -AllowHttp is passed, and
 # persist it so the service (which reads config.json, not CLI flags) agrees.
@@ -47,8 +54,10 @@ $config = @{
   server_url       = $ServerUrl
   verify_tls       = if ($CaBundle) { $CaBundle } else { $true }
   insecure_http_ok = $allowHttp
+  log_file         = "$dataDir\agent.log"
 } | ConvertTo-Json
-Set-Content -Path "$dataDir\config.json" -Value $config -Encoding UTF8
+# Write UTF-8 *without* a BOM (Set-Content -Encoding UTF8 adds one on PowerShell 5.1).
+[System.IO.File]::WriteAllText("$dataDir\config.json", $config, (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host "Enrolling with the server..."
 # Global options (--server, --insecure-http) must come BEFORE the subcommand;
@@ -61,11 +70,38 @@ if ($LASTEXITCODE -ne 0) {
   throw "Enrolment failed (exit $LASTEXITCODE). Check the server URL and that the token is valid and unused."
 }
 
-$svcName = "LognexaAgent"
-$bin = "`"$InstallDir\venv\Scripts\lognexa-agent.exe`" run"
-if (Get-Service $svcName -ErrorAction SilentlyContinue) { sc.exe delete $svcName | Out-Null; Start-Sleep 2 }
-sc.exe create $svcName binPath= $bin start= auto DisplayName= "Lognexa Endpoint Agent" | Out-Null
-sc.exe description $svcName "Collects endpoint security telemetry for Lognexa." | Out-Null
-sc.exe failure $svcName reset= 86400 actions= restart/10000/restart/10000/restart/30000 | Out-Null
-Start-Service $svcName
-Write-Host "Lognexa agent installed and started. Check: Get-Service $svcName"
+$taskName = "LognexaAgent"
+$exe = "$InstallDir\venv\Scripts\lognexa-agent.exe"
+
+# Clean up a service left by an older installer, and any previous task.
+if (Get-Service $taskName -ErrorAction SilentlyContinue) {
+  Stop-Service $taskName -ErrorAction SilentlyContinue
+  sc.exe delete $taskName | Out-Null
+}
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+}
+
+Write-Host "Registering startup task '$taskName'..."
+$action    = New-ScheduledTaskAction -Execute $exe -Argument "run" -WorkingDirectory $dataDir
+$trigger   = New-ScheduledTaskTrigger -AtStartup
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) `
+  -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName $taskName -Description "Lognexa endpoint agent: collects security telemetry." `
+  -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+
+Start-ScheduledTask -TaskName $taskName
+Start-Sleep -Seconds 5
+$state = (Get-ScheduledTask -TaskName $taskName).State
+if ($state -ne "Running") {
+  throw "Task '$taskName' is '$state', not running. See $dataDir\agent.log"
+}
+Write-Host ""
+Write-Host "Lognexa agent installed and running (starts automatically at boot)."
+Write-Host "  Status : Get-ScheduledTask $taskName | Select-Object TaskName, State"
+Write-Host "  Log    : $dataDir\agent.log"
+Write-Host "  Stop   : Stop-ScheduledTask $taskName"
+Write-Host "  Remove : Unregister-ScheduledTask $taskName -Confirm:`$false"

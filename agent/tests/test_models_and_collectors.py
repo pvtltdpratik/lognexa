@@ -90,3 +90,41 @@ def test_http_client_requires_https_for_remote():
     # localhost dev with explicit opt-in is allowed
     local = AgentConfig(server_url="http://localhost:8000", data_dir=Path("."), insecure_http_ok=True)
     assert ApiClient(local).base == "http://localhost:8000"
+
+
+def test_config_and_state_accept_utf8_bom(tmp_path, monkeypatch):
+    # Windows PowerShell 5.1 (Set-Content -Encoding UTF8) and Notepad write a BOM.
+    for var in ("LOGNEXA_SERVER_URL", "LOGNEXA_AGENT_DATA_DIR", "LOGNEXA_AGENT_ALLOW_HTTP"):
+        monkeypatch.delenv(var, raising=False)
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text('{"server_url": "http://localhost:8000", "insecure_http_ok": true}', encoding="utf-8-sig")
+    cfg = AgentConfig.load(str(cfg_file))
+    assert cfg.server_url == "http://localhost:8000" and cfg.insecure_http_ok is True
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text('{"device_uid": "dev1", "credential": "dev1.secret"}', encoding="utf-8-sig")
+    assert State(state_file).enrolled
+
+
+def test_log_file_setting_writes_rotating_log(tmp_path, monkeypatch):
+    import logging
+
+    from lognexa_agent.cli import _setup_logging
+
+    monkeypatch.delenv("LOGNEXA_AGENT_LOG_FILE", raising=False)
+    cfg_file = tmp_path / "config.json"
+    log_file = tmp_path / "logs" / "agent.log"
+    cfg_file.write_text('{"server_url": "https://example.test", "log_file": "%s"}'
+                        % str(log_file).replace("\\", "\\\\"), encoding="utf-8")
+    cfg = AgentConfig.load(str(cfg_file))
+    assert cfg.log_file == str(log_file)
+    try:
+        _setup_logging("INFO", cfg.log_file)
+        logging.getLogger("lognexa.test").info("hello from the background agent")
+        for h in logging.getLogger().handlers:
+            h.flush()
+        assert "hello from the background agent" in log_file.read_text(encoding="utf-8")
+    finally:
+        for h in list(logging.getLogger().handlers):
+            h.close()
+            logging.getLogger().removeHandler(h)
