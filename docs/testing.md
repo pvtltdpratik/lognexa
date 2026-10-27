@@ -129,11 +129,11 @@ Next.js dev server on :3000):
 
 | Check | Result |
 |---|---|
-| `server` pytest | **81 passed** |
-| `agent` pytest | **26 passed** |
+| `server` pytest | **81 passed** (v2.1: dataset-API tests replaced by a removal check; + event time-range/sort) |
+| `agent` pytest | **33 passed** (v2.1: + BOM-tolerant config, log file, timestamp precision, schema fitting, poison-event isolation) |
 | `tsc --noEmit` | 0 errors |
 | `eslint .` | 0 errors, 0 warnings |
-| `next build` | Success; 9 routes prerendered |
+| `next build` | Success; 6 routes prerendered (v2.1: access-log pages removed) |
 
 ### Live end-to-end verification
 

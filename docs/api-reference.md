@@ -200,18 +200,11 @@ Returns the `analysis_runs` row:
 
 Run history (newest first) and the most recent run (`404` if none).
 
-## `POST /dataset/generate`
+## ~~`POST /dataset/generate`~~ (removed in v2.1)
 
-**Destructive**: deletes all data and loads a new synthetic dataset, then
-(by default) runs the analysis.
-
-| Field | Default | Validation |
-|---|---|---|
-| seed | 42 | 0 – 2³¹−1 |
-| n_users | 60 | 6 – 500 |
-| days | 14 | 1 – 90 |
-| n_records | 2200 | 200 – 50,000 and ≥ 5 × n_users |
-| run_analysis | true | bool |
+The synthetic-data generator was removed from the application; the app stores
+only real data. The endpoint now returns `404`. The generator survives only as a
+test fixture (`server/tests/synthetic.py`).
 
 ## `GET /analytics/overview`
 

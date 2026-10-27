@@ -184,3 +184,42 @@ See the v2 bug table in [testing.md](testing.md): the diluted sparse-data score,
 the `wevtutil` single-line XML split, the null-safe basename, the sqlcmd `-P`
 redaction, and the Turbopack root resolution were all found by automated tests or
 live verification and fixed.
+
+---
+
+# v2.1 — Mock data removed (2026-10-28)
+
+The dashboard now shows only real endpoint telemetry.
+
+- **Database**: backed up to `server/backups/` (git-ignored), then deleted the
+  synthetic rows in one transaction: 60 users, 2,200 access logs, 2,200 risk
+  scores, 175 access-log alerts, 3 analysis runs. The real enrolled device, its
+  1,000 events and 3 endpoint alerts were kept.
+- **Backend**: removed `POST /dataset/generate` and its schemas,
+  `services/dataset.py`, `scripts/seed.py` and `server/data/*.csv`. The generator
+  moved to `server/tests/synthetic.py` as a test fixture. The access-log APIs
+  (`/logs`, `/risk-scores`, `/analyze`) remain.
+- **Dashboard**: removed `/logs`, `/risk`, `/analysis` and their components. `/`
+  is now an endpoint overview; `/alerts` lists endpoint alerts only. Fixed a
+  brief "Sign in required" flash on page load (hydration render).
+- **Windows installer**: fixed enrolment argument order, UTF-8 BOM in
+  `config.json`, and replaced the non-functional service with a SYSTEM startup
+  scheduled task; added `install-windows.cmd` and an agent log file.
+- **Agent delivery fixes** (found from a live install: 18,906 events stuck,
+  93 send failures, every event sharing one timestamp):
+  - *Timestamps*: Windows `SystemTime` has 7 fractional digits, which
+    `datetime.fromisoformat` rejects on Python 3.10; `_parse_ts` silently fell
+    back to the collection time. Extra digits are now trimmed. The CIM process
+    collector now uses the real `CreationDate` instead of the scan time.
+  - *Stuck queue*: PowerShell script blocks exceed the server's 8,192-char
+    `command_line` limit, so the server rejected the whole batch (422) and the
+    sender retried that same batch forever. Payloads are now clamped to the
+    server schema (`fit_payload`, also applied to already-buffered events), and a
+    rejected batch is bisected to isolate bad events into `rejected.jsonl`.
+- **Live events filters**: order (newest / oldest / highest risk) and time range
+  (last 15 min … 7 days, or a custom From–To in local time). The API now
+  normalises timezone-aware `start`/`end` to naive UTC before comparing.
+- **Timezone display fix**: the API returns naive UTC, which the dashboard parsed
+  as local time, so every time showed 5 h 30 min behind (IST) and enrolment tokens
+  looked expired early. `parseApiDate` now treats offset-less values as UTC.
+- **Tests**: 81 backend + 33 agent, all passing; lint, type-check and build clean.

@@ -69,5 +69,5 @@ All eight objectives are implemented (see [implementation-log.md](implementation
 
 - **Security analyst** – monitors the overview, investigates high-risk events and
   resolves alerts.
-- **Evaluator / examiner** – regenerates data, tunes parameters and inspects the
-  evaluation metrics on the Analysis page.
+- **Evaluator / examiner** – enrols a test endpoint, reviews its live
+  telemetry and alerts, and inspects the detection test suite and its metrics.

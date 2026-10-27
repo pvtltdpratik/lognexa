@@ -40,14 +40,14 @@ LOGNEXA_RANDOM_SEED=42
 > Without PostgreSQL you can use `LOGNEXA_DATABASE_URL=sqlite:///./lognexa_dev.db`
 > (development only; the path is resolved relative to `server/`).
 
-Create tables, load the synthetic dataset, export CSV samples and run the first
-analysis:
+Create or upgrade the schema (never deletes data):
 
 ```bash
-.venv\Scripts\python -m scripts.seed
+.venv\Scripts\python -m scripts.migrate
 ```
 
-Options: `--seed 7 --users 60 --days 14 --records 2200 --no-analyze`.
+The database starts empty; data arrives once an endpoint agent is enrolled
+(see [endpoint-monitoring.md](endpoint-monitoring.md)).
 
 Start the API:
 
@@ -105,12 +105,6 @@ npm run lint
 `.env` and `.env.local` are git-ignored; only the `.env.example` templates are
 committed. No real credentials are stored in the repository.
 
-## Sample data
-
-`server/data/sample_users.csv` and `server/data/sample_access_logs.csv` are
-exported by the seed script (seed 42) for inspection in a spreadsheet. They
-include the `injected_anomaly` ground-truth column.
-
 ## Deployment notes (not performed)
 
 The project was only run locally. For a hosted demo:
@@ -120,8 +114,8 @@ The project was only run locally. For a hosted demo:
 - Use a managed PostgreSQL instance and set `LOGNEXA_DATABASE_URL` as a secret.
 - Set `LOGNEXA_CORS_ORIGINS` to the deployed frontend origin.
 - Build the frontend with `NEXT_PUBLIC_API_URL` pointing at the public API.
-- Add authentication before exposing it: the API currently has none, and
-  `POST /dataset/generate` deletes all data.
+- Set strong `LOGNEXA_ADMIN_TOKEN` / `LOGNEXA_ANALYST_TOKEN` values; the
+  dashboard and endpoint APIs are protected by these bearer tokens.
 
 ## Troubleshooting
 
@@ -130,4 +124,4 @@ The project was only run locally. For a hosted demo:
 | Dashboard shows "Backend unavailable" | Start the API on port 8000, check `NEXT_PUBLIC_API_URL`, then press Retry |
 | `/health` returns `degraded` / API returns `database_error` | Check `LOGNEXA_DATABASE_URL`, that PostgreSQL is running and the password is right |
 | CORS error in browser console | Add the frontend origin to `LOGNEXA_CORS_ORIGINS` and restart the API |
-| Empty dashboard | Run `python -m scripts.seed` or use *Regenerate dataset* on the Analysis page |
+| Empty dashboard | Sign in with a token, then enrol an endpoint (Enrolment page) and install the agent |

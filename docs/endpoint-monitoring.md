@@ -54,7 +54,7 @@ sequenceDiagram
 | Checkpoint recovery | Events are deleted only after the server acknowledges them |
 | Deduplication | `event_uid` (content/record hash) is the buffer PK **and** unique per device server-side → at-least-once delivery, no duplicate rows |
 | Bounded size | Oldest events dropped past `max_buffer_events`; drop count reported in heartbeats |
-| Auto-start | systemd unit (Linux) and Windows service with automatic restart |
+| Auto-start | systemd unit (Linux); Windows startup scheduled task running as SYSTEM with restart on failure |
 | Health | Heartbeats report uptime, buffer depth, send failures, privilege and per-collector status |
 
 Agent threads: **collector** (poll → redact → buffer), **sender** (drain → ack),

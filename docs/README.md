@@ -18,7 +18,7 @@ can acknowledge and resolve from a web dashboard.
 | Storage | `users`, `access_logs`, `risk_scores`, `alerts`, `analysis_runs` tables (PostgreSQL target, SQLite fallback/tests) |
 | Detection | 10 behavioural features, 11 explainable rules, Isolation Forest (scikit-learn) |
 | Scoring | Documented weighted formula + agreement bonus, 4 severity bands, per-event explanation text |
-| API | FastAPI: `/health`, `/logs`, `/alerts`, `/risk-scores`, `/analyze`, `/analytics/overview`, `/users`, `/dataset/generate` |
+| API | FastAPI: `/health`, `/logs`, `/alerts`, `/risk-scores`, `/analyze`, `/analytics/overview`, `/users`, plus the endpoint-monitoring APIs |
 | Dashboard | Next.js + shadcn/ui: overview charts, searchable/filterable logs, alert triage, risk methodology, analysis & evaluation |
 | Validation | Pydantic on every endpoint (query, path, body), Zod + react-hook-form on the client, consistent JSON error envelope |
 | Tests | 48 pytest tests (generator, features, rules, scoring, API, empty DB) |
@@ -29,7 +29,7 @@ can acknowledge and resolve from a web dashboard.
 cd server
 .venv\Scripts\python -m pip install -r requirements.txt
 copy .env.example .env        # then edit LOGNEXA_DATABASE_URL
-.venv\Scripts\python -m scripts.seed
+.venv\Scripts\python -m scripts.migrate
 .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
@@ -61,7 +61,7 @@ lognexa/
 │   ├── app/schemas.py      Pydantic request/response schemas
 │   ├── app/routers/        logs, alerts, risk, analysis, analytics
 │   ├── app/services/       synthetic, policy, features, rules, ml, scoring, pipeline, dataset
-│   ├── scripts/seed.py     Create tables, load data, run analysis
+│   ├── scripts/migrate.py  Create / upgrade the schema (never deletes data)
 │   ├── data/               Exported sample CSVs (users + access logs)
 │   └── tests/              pytest suite
 └── docs/                   Project documentation (this folder)

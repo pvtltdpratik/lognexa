@@ -1,7 +1,9 @@
 # Detection & ML Methodology
 
-Code: `server/app/services/` — `synthetic.py`, `policy.py`, `features.py`,
-`rules.py`, `ml.py`, `scoring.py`, `pipeline.py`.
+Code: `server/app/services/` — `policy.py`, `features.py`, `rules.py`,
+`ml.py`, `scoring.py`, `pipeline.py`. The synthetic dataset below is generated
+by `server/tests/synthetic.py`, a **test fixture only** since v2.1 (the app
+itself stores no synthetic data).
 
 ## 1. Synthetic dataset
 
@@ -118,8 +120,8 @@ model separately found the event anomalous.
 | Low | < 25 |
 
 An **alert** is created when `risk ≥ alert_threshold` (default **40**, i.e. upper
-Medium and above). The threshold, `w` and contamination are adjustable on the
-Analysis page / `POST /analyze`.
+Medium and above). The threshold, `w` and contamination are adjustable through
+`POST /analyze`.
 
 ## 6. Explainability
 

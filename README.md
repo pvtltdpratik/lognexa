@@ -7,7 +7,7 @@
 ### AI-Driven Access Log Auditing & Cross-Platform Endpoint Monitoring
 
 Explainable rules + Isolation Forest → risk scores, severity levels and correlated
-security alerts, for synthetic access logs **and** live Windows / Linux endpoints.
+security alerts from live Windows / Linux endpoints.
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white" />
@@ -22,8 +22,8 @@ security alerts, for synthetic access logs **and** live Windows / Linux endpoint
   <img alt="Linux" src="https://img.shields.io/badge/Linux_agent-FCC624?style=for-the-badge&logo=linux&logoColor=black" />
 </p>
 <p>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-107_passing-2EA043?style=flat-square" />
-  <img alt="Data" src="https://img.shields.io/badge/access_logs-synthetic-D73A49?style=flat-square" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-114_passing-2EA043?style=flat-square" />
+  <img alt="Data" src="https://img.shields.io/badge/data-real_telemetry_only-2EA043?style=flat-square" />
   <img alt="Version" src="https://img.shields.io/badge/version-2.0.0-6E7781?style=flat-square" />
 </p>
 
@@ -34,23 +34,23 @@ security alerts, for synthetic access logs **and** live Windows / Linux endpoint
 ---
 
 > [!IMPORTANT]
-> Lognexa is a **final-year B.E./B.Tech CSE student prototype**. The access-log
-> auditing module uses **100% synthetic data**. The endpoint-monitoring module
-> collects **real telemetry** from machines you enrol — run it only on systems you
-> are authorised to monitor. Detection is heuristic and **not** a replacement for
+> Lognexa is a **final-year B.E./B.Tech CSE student prototype**. It ships with
+> **no demo data**: everything on the dashboard is **real telemetry** from machines
+> you enrol — run it only on systems you are authorised to monitor. Detection is heuristic and **not** a replacement for
 > a production EDR/SIEM. It never takes automated destructive action.
 
 ## 🔍 Overview
 
-Lognexa has two complementary modules that share one detection engine, database,
-API and dashboard:
+Lognexa's core is **cross-platform endpoint monitoring**: lightweight
+**Windows and Linux agents** collect OS telemetry (authentication, process
+execution, network connections, sensitive-file changes, persistence) and ship it
+to the backend, which scores it, correlates related events and raises
+explainable alerts on the dashboard.
 
-1. **Access-log auditing** — analyses a reproducible synthetic dataset of user
-   access events (logins, file access, resource usage) for four anomaly families.
-2. **Cross-platform endpoint monitoring** — lightweight **Windows and Linux
-   agents** collect OS telemetry (authentication, process execution, network
-   connections, sensitive-file changes, persistence) and ship it to the backend,
-   which scores it, correlates related events and raises explainable alerts.
+The backend also keeps the original **access-log auditing** pipeline and APIs
+(logins, file access, resource usage). There is no access-log collector yet, so
+this module holds no data and has no dashboard page; its tests use a synthetic
+fixture that lives only in the test suite.
 
 Both use the same approach: **explainable rules** say *why* something is
 suspicious, an **Isolation Forest** finds statistical outliers, and the two
@@ -71,7 +71,7 @@ features** — existing data and APIs are preserved through database migrations.
 | 🧠 **Endpoint detection** | 15 `EP-*` rules (brute force, suspicious commands, persistence, sensitive-file changes, log clearing, C2-like connections) + per-device Isolation Forest + **event correlation** into incidents |
 | 🔐 **Security** | HTTPS-only agent transport, per-device credentials (hashed), credential rotation & revocation, role-based dashboard auth, sensitive-data redaction |
 | 📊 **Dashboard** | Endpoint inventory, agent health, live events, investigation timelines, enrolment-token management, unified alert triage |
-| ✅ **Tests** | 107 automated tests (81 backend + 26 agent), both OSes exercised |
+| ✅ **Tests** | 114 automated tests (81 backend + 33 agent), both OSes exercised |
 
 ## 🏗️ Architecture
 
@@ -85,7 +85,6 @@ flowchart TB
         AG["/agent/*  (device auth, HTTPS)"]
         API["Dashboard APIs (token auth)"]
         DET["Detection engine<br/>rules · Isolation Forest · scoring · correlation"]
-        GEN["Synthetic access-log generator"]
     end
     DB[("🐘 PostgreSQL / SQLite<br/>SQLAlchemy 2 · Alembic")]
     UI["🌐 Next.js dashboard"]
@@ -93,7 +92,6 @@ flowchart TB
     WA -- "enrol · heartbeat · events (buffered, retried)" --> AG
     LA -- "enrol · heartbeat · events" --> AG
     AG --> DET
-    GEN --> DET
     DET <--> DB
     UI -- "REST + bearer token" --> API
     API <--> DB
@@ -135,18 +133,19 @@ lognexa/
 │   │   │                        #   agent (device-facing), endpoints (dashboard)
 │   │   └── services/            # detection, endpoint_detection, endpoint_service, …
 │   ├── migrations/              # Alembic (0001 baseline, 0002 endpoint)
-│   ├── scripts/                 # seed.py, migrate.py
-│   └── tests/                   # 81 backend tests
+│   ├── scripts/                 # migrate.py, init_postgres.sql
+│   └── tests/                   # 81 backend tests (synthetic fixture lives here only)
 ├── client/                      # Next.js dashboard
 └── docs/                        # full documentation
 ```
 
 ## 📡 Monitoring capabilities
 
-### Access-log auditing (synthetic)
+### Access-log auditing (backend only)
 Repeated/brute-force failed logins · unusual login hours · new/rare IPs &
-countries · sensitive-resource access outside role. 2,200 events, 60 users,
-14 days, reproducible from a seed.
+countries · sensitive-resource access outside role. Available through the
+`/logs`, `/risk-scores` and `/analyze` APIs; no data until an access-log source
+is connected.
 
 ### Endpoint monitoring (real telemetry)
 
@@ -219,17 +218,15 @@ LOGNEXA_AGENT_REQUIRE_HTTPS=true
 > SQLite fallback: `LOGNEXA_DATABASE_URL=sqlite:///./lognexa_dev.db`. All settings
 > use the `LOGNEXA_` prefix so a machine-wide `DATABASE_URL` is never picked up.
 
-### 3. Apply migrations and load the synthetic dataset
+### 3. Apply migrations
 
 ```bash
 .venv\Scripts\python -m scripts.migrate     # creates/upgrades schema; never deletes data
-.venv\Scripts\python -m scripts.seed        # loads synthetic access logs + runs analysis
 ```
 
 > `migrate` adopts a pre-existing **v1** database automatically (it stamps the
-> baseline revision and upgrades) — your existing users, logs and alerts are kept.
-> `seed` only touches synthetic access-log data; endpoint devices and telemetry
-> are never affected.
+> baseline revision and upgrades) — your existing data is kept. The database
+> starts empty: data arrives once you enrol an endpoint (see below).
 
 ### 4. Start the API
 
@@ -248,14 +245,15 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. For endpoint pages, click **Sign in** (top bar) and
-paste your analyst or admin token.
+Open <http://localhost:3000>, click **Sign in** (top bar) and paste your analyst
+or admin token. Every page shows endpoint data, so it stays empty until an agent
+is enrolled.
 
 ### 6. Tests
 
 ```bash
 cd server && .venv\Scripts\python -m pytest          # 81 backend tests
-cd agent  && python -m pytest                        # 26 agent tests
+cd agent  && python -m pytest                        # 33 agent tests
 cd client && npm run lint && npm run build           # lint + production build
 ```
 
@@ -286,7 +284,7 @@ sudo cp agent/deploy/lognexa-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now lognexa-agent
 ```
 
-### Windows (service, elevated PowerShell)
+### Windows (startup task, elevated PowerShell)
 
 ```powershell
 cd agent\deploy
@@ -298,6 +296,12 @@ execution by file association). To avoid that, double-click
 `install-windows.cmd` instead: it requests Administrator rights (UAC), prompts
 for the server URL and token, and runs the installer with the execution policy
 bypassed for that one invocation.
+
+The installer registers a `LognexaAgent` scheduled task that runs the agent as
+SYSTEM at boot and restarts it on failure. Logs go to
+`C:\ProgramData\Lognexa\agent\agent.log`. Check it with
+`Get-ScheduledTask LognexaAgent`, and remove it with
+`Unregister-ScheduledTask LognexaAgent -Confirm:$false`.
 
 The Windows Security event log and some collectors require **Administrator**;
 without it the agent still runs and reports which collectors are unavailable.
@@ -333,9 +337,9 @@ for backward compatibility; **endpoint data always requires a token**.
 | `GET`/`POST` | `/enrollment-tokens` | admin | List / create enrolment tokens |
 | `GET` | `/endpoint-events` · `/endpoint-events/{id}` | analyst | Telemetry + correlated detail |
 | `GET` | `/endpoint/overview` | analyst | Endpoint dashboard statistics |
-| `GET`/`PATCH` | `/alerts` · `/alerts/{id}` | mixed | Access-log + endpoint alerts; triage |
-| `GET` | `/logs`, `/risk-scores`, `/analytics/overview` | — | Access-log auditing (v1) |
-| `POST` | `/analyze`, `/dataset/generate` | — | Re-run analysis / regenerate synthetic data |
+| `GET`/`PATCH` | `/alerts` · `/alerts/{id}` | mixed | Alert list, detail and triage (endpoint alerts need a token) |
+| `GET` | `/logs`, `/risk-scores`, `/analytics/overview` | — | Access-log auditing (v1; backend only) |
+| `POST` | `/analyze` | — | Run access-log analysis (409 `no_data` until access logs exist) |
 
 Errors use one envelope: `{"error":{"code","message","details"}}`. Full
 reference: [`docs/api-reference.md`](docs/api-reference.md).
@@ -357,18 +361,18 @@ risk = w × rule_score + (1 − w) × ml_score + 10 (if a rule fired AND the for
 Severity: Critical ≥ 75 · High ≥ 50 · Medium ≥ 25 · Low < 25. When a device has
 fewer than 50 events in the look-back window the Isolation Forest is not fitted
 and endpoint risk falls back to the pure rule score, so a strong single indicator
-still alerts. Access-log evaluation on the synthetic dataset (threshold 40):
-precision **0.78**, recall **0.96**, F1 **0.86** — measured against injected
-labels only, not an estimate of real-world accuracy. See
+still alerts. The access-log pipeline, evaluated in the test suite on a
+synthetic fixture with injected labels (threshold 40): precision **0.78**,
+recall **0.96**, F1 **0.86** — not an estimate of real-world accuracy. See
 [`docs/ml-methodology.md`](docs/ml-methodology.md).
 
 ## 🧪 Testing
 
 | Suite | Count | Covers |
 |---|---|---|
-| Backend (`server/tests`) | 81 | Synthetic data, access-log detection, endpoint detection (both OSes), endpoint API (enrol/auth/ingest/dedup/redaction/rotation/revocation), migrations (incl. v1 adoption), API security |
-| Agent (`agent/tests`) | 26 | Durable buffer (persistence, dedup, bounded size), redaction, event identity, collector availability per platform, HTTPS enforcement |
-| Frontend | — | `tsc`, ESLint, production build (9 routes) |
+| Backend (`server/tests`) | 81 | Access-log detection (synthetic test fixture), endpoint detection (both OSes), endpoint API (enrol/auth/ingest/dedup/redaction/rotation/revocation), migrations (incl. v1 adoption), API security |
+| Agent (`agent/tests`) | 33 | Durable buffer (persistence, dedup, bounded size), redaction, event identity, collector availability per platform, HTTPS enforcement, BOM-tolerant config, log file, Windows timestamp precision, schema fitting, poison-event isolation |
+| Frontend | — | `tsc`, ESLint, production build (6 routes) |
 
 End-to-end flows were also verified live on this machine (Windows collectors) and
 in Ubuntu WSL (Linux collectors). See [`docs/testing.md`](docs/testing.md).
@@ -381,12 +385,13 @@ in Ubuntu WSL (Linux collectors). See [`docs/testing.md`](docs/testing.md).
 | `/devices` → `503 auth_not_configured` | Set `LOGNEXA_ADMIN_TOKEN` / `LOGNEXA_ANALYST_TOKEN` and restart the API |
 | Agent: "Refusing to use plain HTTP" | Use an `https://` server URL, or `insecure_http_ok` for a localhost dev server |
 | Windows Security collector `permission_denied` | Run the agent as Administrator |
+| Agent log shows `server rejected event` | The event is saved to `rejected.jsonl` in the agent data folder; the rest of the batch is still delivered |
 | Linux `linux_auth` can't read the journal | Add the agent user to the `systemd-journal` group |
 | Dashboard "Backend unavailable" | Start the API on port 8000; check `NEXT_PUBLIC_API_URL` |
 
 ## ⚠️ Limitations
 
-- Access-log data is synthetic; its metrics don't predict real-world accuracy.
+- No access-log collector yet: that pipeline is only exercised against a synthetic test fixture.
 - Endpoint detection is heuristic (rules + unsupervised ML), not a full EDR; some collectors need elevated privilege or Sysmon.
 - Analysis is batch, not streaming; per-device baselines use a look-back window.
 - Dashboard auth is static bearer tokens (no per-user accounts/SSO).

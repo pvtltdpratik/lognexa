@@ -1,8 +1,8 @@
 # Database Schema
 
 Defined in `server/app/models.py` (SQLAlchemy 2 declarative models). Tables are
-created automatically on API start-up and by `scripts/seed.py`
-(`Base.metadata.create_all`). Only portable column types are used, so the same
+created and upgraded by Alembic migrations, on API start-up or with
+`python -m scripts.migrate`. Only portable column types are used, so the same
 schema runs on PostgreSQL (target) and SQLite (tests / local fallback). JSON
 columns map to `json` on PostgreSQL.
 
@@ -170,8 +170,6 @@ Audit trail of every analysis.
 - `risk_scores` are fully replaced.
 - Alerts with status `open` are deleted and regenerated; `acknowledged` and
   `resolved` alerts are **kept**, so analyst work survives a re-run.
-- `POST /dataset/generate` deletes all tables' rows (demo data only) before
-  loading a new dataset.
 
 ## PostgreSQL setup
 

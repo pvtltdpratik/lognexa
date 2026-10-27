@@ -88,15 +88,21 @@ sequenceDiagram
 
 | Route | File | Purpose |
 |---|---|---|
-| `/` | `client/app/page.tsx` | KPI cards, daily activity/alerts chart, severity distribution, hourly histogram, rule hits, top users, latest run |
-| `/logs` | `client/app/logs/page.tsx` | Search + 7 filters, sorting, pagination, event detail sheet |
-| `/alerts` | `client/app/alerts/page.tsx` | Status tabs, search/severity/sort, alert detail sheet, acknowledge/resolve/reopen |
-| `/risk` | `client/app/risk/page.tsx` | Methodology (formula, bands, rules), scored-event table, user ranking |
-| `/analysis` | `client/app/analysis/page.tsx` | Run-analysis form, regenerate-dataset form, evaluation metrics, run history |
+All pages show real endpoint data and require an analyst or admin token.
+
+| Route | File | Purpose |
+|---|---|---|
+| `/` | `client/app/page.tsx` | Endpoint KPIs, 24-hour telemetry chart, severity and category breakdowns, highest-risk open alerts, collector issues |
+| `/endpoints` | `client/app/endpoints/page.tsx` | Device inventory, OS/connection filters, agent health, device detail sheet |
+| `/events` | `client/app/events/page.tsx` | Live telemetry feed with filters and an investigation timeline |
+| `/alerts` | `client/app/alerts/page.tsx` | Endpoint alerts: status tabs, search/severity/sort, correlated-event detail, acknowledge/resolve/reopen |
+| `/enrollment` | `client/app/enrollment/page.tsx` | Create and revoke enrolment tokens (admin) |
+
+The v1 access-log pages (`/logs`, `/risk`, `/analysis`) were removed in v2.1
+along with the synthetic demo data; their backend APIs remain.
 
 Shared pieces: `components/app-shell.tsx` (sidebar, header, API health
-indicator, theme toggle), `components/risk-explanation.tsx`,
-`components/log-detail-sheet.tsx`, `components/alert-action-dialog.tsx`,
+indicator, theme toggle), `components/auth.tsx`, `components/alert-action-dialog.tsx`,
 `hooks/use-api.ts`, `lib/api.ts`.
 
 All pages are client components that fetch from the API at runtime, so the
