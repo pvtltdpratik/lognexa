@@ -128,3 +128,30 @@ def test_log_file_setting_writes_rotating_log(tmp_path, monkeypatch):
         for h in list(logging.getLogger().handlers):
             h.close()
             logging.getLogger().removeHandler(h)
+
+
+def test_cli_reports_server_errors_without_traceback(monkeypatch, capsys):
+    import lognexa_agent.cli as cli
+    from lognexa_agent.client import ApiError
+
+    def boom(args):
+        raise ApiError(0, "transport_error", "connection refused")
+
+    monkeypatch.setattr(cli, "cmd_status", boom)
+    monkeypatch.setenv("LOGNEXA_SERVER_URL", "https://example.test")
+    assert cli.main(["status"]) == 1
+    err = capsys.readouterr().err
+    assert "transport_error: connection refused" in err and "Traceback" not in err
+
+
+def test_server_flag_works_without_config_or_env(tmp_path, monkeypatch):
+    # A fresh machine: no config.json and no LOGNEXA_SERVER_URL, only --server.
+    for var in ("LOGNEXA_SERVER_URL", "LOGNEXA_AGENT_DATA_DIR"):
+        monkeypatch.delenv(var, raising=False)
+    missing = tmp_path / "absent.json"
+    cfg = AgentConfig.load(str(missing), server_url="https://lognexa.example.test/")
+    assert cfg.server_url == "https://lognexa.example.test"
+    # The flag also beats the environment.
+    monkeypatch.setenv("LOGNEXA_SERVER_URL", "https://from-env.example.test")
+    assert AgentConfig.load(str(missing), server_url="https://flag.example.test").server_url == "https://flag.example.test"
+    assert AgentConfig.load(str(missing)).server_url == "https://from-env.example.test"

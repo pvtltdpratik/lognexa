@@ -48,7 +48,7 @@ class AgentConfig:
         return self.data_dir / "buffer.db"
 
     @classmethod
-    def load(cls, path: str | None = None) -> "AgentConfig":
+    def load(cls, path: str | None = None, server_url: str | None = None) -> "AgentConfig":
         data: dict = {}
         cfg_path = Path(path) if path else (default_data_dir() / "config.json")
         if cfg_path.exists():
@@ -56,9 +56,10 @@ class AgentConfig:
             data = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
         # Environment variables override the file.
         env = os.environ
-        server = env.get("LOGNEXA_SERVER_URL", data.get("server_url", ""))
+        # Precedence: --server on the command line, then the environment, then the file.
+        server = server_url or env.get("LOGNEXA_SERVER_URL", data.get("server_url", ""))
         if not server:
-            raise SystemExit("server_url is required (set it in config.json or LOGNEXA_SERVER_URL)")
+            raise SystemExit("server_url is required (use --server, LOGNEXA_SERVER_URL or config.json)")
         data_dir = Path(env.get("LOGNEXA_AGENT_DATA_DIR", data.get("data_dir") or default_data_dir()))
         verify = data.get("verify_tls", True)
         if "LOGNEXA_AGENT_CA_BUNDLE" in env:

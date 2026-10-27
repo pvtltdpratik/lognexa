@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from lognexa_agent import __version__
+from lognexa_agent.client import ApiError
 from lognexa_agent.config import AgentConfig, State, is_privileged
 
 
@@ -35,9 +36,7 @@ def _setup_logging(level: str, log_file: str | None = None) -> None:
 
 
 def _config(args) -> AgentConfig:
-    cfg = AgentConfig.load(args.config)
-    if getattr(args, "server", None):
-        cfg.server_url = args.server.rstrip("/")
+    cfg = AgentConfig.load(args.config, server_url=getattr(args, "server", None))
     if getattr(args, "token", None):
         cfg.enroll_token = args.token
     if getattr(args, "insecure_http", False):
@@ -178,6 +177,11 @@ def main(argv: list[str] | None = None) -> int:
         raise
     except KeyboardInterrupt:
         return 130
+    except ApiError as exc:
+        # Server or network problems: one clear line instead of a traceback.
+        hint = " (is the server URL right and reachable?)" if exc.status == 0 else ""
+        print(f"lognexa-agent: error: {exc.code}: {exc.message}{hint}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
