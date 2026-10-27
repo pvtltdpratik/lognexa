@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/components/ui/toast"
 import { useApi } from "@/hooks/use-api"
 import { api, errorMessage } from "@/lib/api"
-import { formatShort } from "@/lib/format"
+import { formatShort, parseApiDate } from "@/lib/format"
 import type { EnrollmentTokenCreated } from "@/lib/types"
 
 function CopyButton({ text }: { text: string }) {
@@ -168,7 +168,7 @@ export default function EnrollmentPage() {
               </TableHeader>
               <TableBody>
                 {tokens.data.map((t) => {
-                  const expired = new Date(t.expires_at) < new Date()
+                  const expired = parseApiDate(t.expires_at) < new Date()
                   const exhausted = t.uses >= t.max_uses
                   const active = !t.revoked && !expired && !exhausted
                   return (
