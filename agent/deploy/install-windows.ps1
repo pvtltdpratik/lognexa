@@ -7,12 +7,17 @@
   service that restarts automatically. Run from an elevated PowerShell prompt.
 .EXAMPLE
   .\install-windows.ps1 -ServerUrl "https://lognexa.example.com:8000" -EnrollToken "lnx_..."
+.NOTES
+  Double-clicking a .ps1 opens it in Notepad instead of running it. Use the
+  install-windows.cmd wrapper in this folder for a double-clickable, self-
+  elevating install, or run this script from an elevated PowerShell prompt.
 #>
 param(
   [Parameter(Mandatory = $true)][string]$ServerUrl,
   [Parameter(Mandatory = $true)][string]$EnrollToken,
   [string]$InstallDir = "$env:ProgramFiles\Lognexa Agent",
-  [string]$CaBundle = ""
+  [string]$CaBundle = "",
+  [switch]$AllowHttp
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,11 +39,27 @@ Copy-Item -Recurse -Force "$PSScriptRoot\..\*" $InstallDir -Exclude @("deploy")
 
 $dataDir = "$env:ProgramData\Lognexa\agent"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-$config = @{ server_url = $ServerUrl; verify_tls = if ($CaBundle) { $CaBundle } else { $true } } | ConvertTo-Json
+# Plain HTTP is accepted only for a localhost dev server (enforced by the client).
+# Enable it automatically for an http:// URL, or when -AllowHttp is passed, and
+# persist it so the service (which reads config.json, not CLI flags) agrees.
+$allowHttp = [bool]$AllowHttp -or ($ServerUrl -like "http://*")
+$config = @{
+  server_url       = $ServerUrl
+  verify_tls       = if ($CaBundle) { $CaBundle } else { $true }
+  insecure_http_ok = $allowHttp
+} | ConvertTo-Json
 Set-Content -Path "$dataDir\config.json" -Value $config -Encoding UTF8
 
 Write-Host "Enrolling with the server..."
-& "$InstallDir\venv\Scripts\lognexa-agent.exe" enroll --server $ServerUrl --token $EnrollToken
+# Global options (--server, --insecure-http) must come BEFORE the subcommand;
+# --token belongs to the enroll subcommand.
+$enrollArgs = @("--server", $ServerUrl)
+if ($allowHttp) { $enrollArgs += "--insecure-http" }
+$enrollArgs += @("enroll", "--token", $EnrollToken)
+& "$InstallDir\venv\Scripts\lognexa-agent.exe" @enrollArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Enrolment failed (exit $LASTEXITCODE). Check the server URL and that the token is valid and unused."
+}
 
 $svcName = "LognexaAgent"
 $bin = "`"$InstallDir\venv\Scripts\lognexa-agent.exe`" run"

@@ -293,6 +293,12 @@ cd agent\deploy
 .\install-windows.ps1 -ServerUrl "https://your-server:8000" -EnrollToken "<token>"
 ```
 
+Double-clicking the `.ps1` only opens it in Notepad (Windows blocks script
+execution by file association). To avoid that, double-click
+`install-windows.cmd` instead: it requests Administrator rights (UAC), prompts
+for the server URL and token, and runs the installer with the execution policy
+bypassed for that one invocation.
+
 The Windows Security event log and some collectors require **Administrator**;
 without it the agent still runs and reports which collectors are unavailable.
 
