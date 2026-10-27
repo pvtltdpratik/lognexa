@@ -102,11 +102,29 @@ class Agent:
         }
         log.info("enrolling with %s", self.config.server_url)
         resp = self.client.enroll(payload)
-        self.state.set_credential(resp["device_uid"], resp["credential"])
+        self.state.set_credential(resp["device_uid"], resp["credential"], self.config.server_url)
         self.client.credential = resp["credential"]
         self.config.heartbeat_interval = resp.get("heartbeat_interval_seconds", self.config.heartbeat_interval)
         self.config.batch_size = min(self.config.batch_size, resp.get("max_events_per_batch", self.config.batch_size))
         log.info("enrolled as device %s", resp["device_uid"])
+
+    def check_credential(self) -> str:
+        """Ask the configured server whether the stored credential is still accepted.
+
+        Returns "ok", "invalid" (not accepted here, e.g. it was issued by another
+        server or has been replaced) or "revoked". Network and server errors
+        propagate, so a caller never mistakes "unreachable" for "enrolled".
+        """
+        self.client.credential = self.state.credential
+        try:
+            self.client.heartbeat(self._health_payload())
+        except ApiError as exc:
+            if exc.status == 401:
+                return "invalid"
+            if exc.status == 403 and exc.code == "device_revoked":
+                return "revoked"
+            raise
+        return "ok"
 
     # --- loops ---------------------------------------------------------------
     def _collect_once(self) -> int:
@@ -221,7 +239,13 @@ class Agent:
                 if resp.get("rotate_credentials"):
                     self._rotate()
             except ApiError as exc:
-                log.warning("heartbeat failed (%s)", exc.code)
+                if exc.status == 401:
+                    # Retrying can't fix this; say exactly what will.
+                    log.error("server %s rejected this device's credential (%s). Re-enrol with: "
+                              "lognexa-agent --server %s enroll --force --token <token>",
+                              self.config.server_url, exc.code, self.config.server_url)
+                else:
+                    log.warning("heartbeat failed (%s)", exc.code)
             except Exception:
                 log.exception("heartbeat cycle failed")
             self._stop.wait(self.config.heartbeat_interval)
@@ -229,7 +253,7 @@ class Agent:
     def _rotate(self) -> None:
         try:
             resp = self.client.rotate()
-            self.state.set_credential(self.state.device_uid, resp["credential"])
+            self.state.set_credential(self.state.device_uid, resp["credential"], self.config.server_url)
             self.client.credential = resp["credential"]
             log.info("rotated device credential")
         except ApiError as exc:

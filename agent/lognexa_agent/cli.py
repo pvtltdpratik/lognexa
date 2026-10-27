@@ -70,8 +70,25 @@ def cmd_enroll(args) -> int:
     _setup_logging(cfg.log_level, cfg.log_file)
     agent = Agent(cfg)
     if agent.state.enrolled and not args.force:
-        print(f"Already enrolled as device {agent.state.device_uid}. Use --force to re-enrol.")
-        return 0
+        # Don't trust the stored credential blindly: it may have been issued by a
+        # different server (e.g. after changing the server URL) or replaced.
+        status = agent.check_credential()
+        if status == "ok":
+            if agent.state.server_url != cfg.server_url:
+                agent.state.data["server_url"] = cfg.server_url  # record it (older state files lack it)
+                agent.state.save()
+            print(f"Already enrolled as device {agent.state.device_uid} with {cfg.server_url}.")
+            return 0
+        if status == "revoked":
+            print(f"lognexa-agent: error: device {agent.state.device_uid} has been revoked on {cfg.server_url}; "
+                  "an administrator must restore it.", file=sys.stderr)
+            return 1
+        if not cfg.enroll_token:
+            print(f"lognexa-agent: error: the stored credential is not valid on {cfg.server_url}; "
+                  "enrol with --token <token>.", file=sys.stderr)
+            return 1
+        print(f"Stored credential is not valid on {cfg.server_url}; enrolling with the new token...")
+        agent.state.data["credential"] = None
     if args.force:
         agent.state.data["credential"] = None
     agent.ensure_enrolled()
@@ -99,6 +116,7 @@ def cmd_status(args) -> int:
         "data_dir": str(cfg.data_dir),
         "enrolled": state.enrolled,
         "device_uid": state.device_uid,
+        "enrolled_with": state.server_url,
         "buffer_pending": buffer_pending,
     }, indent=2))
     return 0

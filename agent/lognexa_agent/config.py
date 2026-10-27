@@ -121,10 +121,16 @@ class State:
     def credential(self) -> str | None:
         return self.data.get("credential")
 
-    def set_credential(self, device_uid: str, credential: str) -> None:
+    def set_credential(self, device_uid: str, credential: str, server_url: str | None = None) -> None:
         self.data["device_uid"] = device_uid
         self.data["credential"] = credential
+        # A credential is only valid on the server that issued it.
+        self.data["server_url"] = server_url
         self.save()
+
+    @property
+    def server_url(self) -> str | None:
+        return self.data.get("server_url")
 
     def checkpoint(self, collector: str, default=None):
         return self.data.get("checkpoints", {}).get(collector, default)
