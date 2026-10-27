@@ -140,7 +140,7 @@ def run_analysis(db: Session, params: AnalysisParams) -> AnalysisRun:
     try:
         df = load_log_frame(db)
         if df.empty:
-            raise ValueError("No access logs found. Generate the synthetic dataset first.")
+            raise ValueError("No access logs found. There is nothing to analyse yet.")
         scored = score_frame(df, params)
 
         db.execute(delete(RiskScore))

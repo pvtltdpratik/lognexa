@@ -29,6 +29,8 @@ interface AuthState {
 
 const AuthContext = React.createContext<AuthState>({ role: null, signedIn: false, ready: false, signOut: () => {} })
 
+const noopSubscribe = () => () => {}
+
 export function useAuth() {
   return React.useContext(AuthContext)
 }
@@ -52,8 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token])
 
-  // "ready" once the current token has been resolved (verified or rejected).
-  const ready = resolved.token === token
+  // The hydration render uses the server snapshot (no token), which would briefly
+  // look like "signed out". Only report ready on the client, once the current
+  // token has been resolved (verified or rejected).
+  const hydrated = React.useSyncExternalStore(noopSubscribe, () => true, () => false)
+  const ready = hydrated && resolved.token === token
   const role = ready ? resolved.role : null
   const value: AuthState = { role, signedIn: ready && role !== null, ready, signOut: () => auth.set(null) }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

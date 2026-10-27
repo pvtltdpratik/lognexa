@@ -10,9 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base, get_db, make_engine
 from app.main import app
-from app.services.dataset import reset_and_load
 from app.services.pipeline import AnalysisParams, run_analysis
-from app.services.synthetic import generate_dataset
+from tests.synthetic import generate_dataset, load_dataset
 
 
 @pytest.fixture(scope="module")
@@ -28,7 +27,7 @@ def session_factory():
 def seeded(session_factory):
     """Small dataset (fast) loaded and analysed once per module."""
     with session_factory() as db:
-        reset_and_load(db, generate_dataset(seed=7, n_users=24, days=7, n_records=700))
+        load_dataset(db, generate_dataset(seed=7, n_users=24, days=7, n_records=700))
         run_analysis(db, AnalysisParams(seed=7))
     return session_factory
 

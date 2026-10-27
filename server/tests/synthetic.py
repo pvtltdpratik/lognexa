@@ -1,4 +1,8 @@
-"""Reproducible synthetic access-log generator.
+"""Reproducible synthetic access-log generator (TEST FIXTURE ONLY).
+
+This lives in the test suite, not the application: the app holds only real
+data. Tests use it to exercise the access-log detection pipeline against
+known, injected anomalies.
 
 Produces ~2,200 events for 60 synthetic users over 14 days, with four
 injected anomaly families:
@@ -294,3 +298,13 @@ def generate_dataset(
         for u in users
     ]
     return Dataset(users=public_users, logs=logs)
+
+
+def load_dataset(db, dataset: Dataset) -> dict:
+    """Insert ``dataset`` into a (test) database session."""
+    from app.models import AccessLog, User
+
+    db.bulk_insert_mappings(User, dataset.users)
+    db.bulk_insert_mappings(AccessLog, dataset.logs)
+    db.commit()
+    return {"users": len(dataset.users), "logs": len(dataset.logs)}

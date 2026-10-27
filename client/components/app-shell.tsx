@@ -3,12 +3,9 @@
 import {
   ActivityIcon,
   BellRingIcon,
-  BrainCircuitIcon,
-  GaugeIcon,
   LaptopIcon,
   LayoutDashboardIcon,
   ListTreeIcon,
-  ScrollTextIcon,
   ShieldIcon,
 } from "lucide-react"
 import Link from "next/link"
@@ -42,25 +39,17 @@ import { cn } from "@/lib/utils"
 
 const NAV_GROUPS = [
   {
-    label: "Access log auditing",
-    items: [
-      { href: "/", label: "Overview", icon: LayoutDashboardIcon },
-      { href: "/logs", label: "Access logs", icon: ScrollTextIcon },
-      { href: "/risk", label: "Risk scores", icon: GaugeIcon },
-      { href: "/analysis", label: "Analysis & data", icon: BrainCircuitIcon },
-    ],
-  },
-  {
     label: "Endpoint monitoring",
     items: [
+      { href: "/", label: "Overview", icon: LayoutDashboardIcon },
       { href: "/endpoints", label: "Endpoints", icon: LaptopIcon },
       { href: "/events", label: "Live events", icon: ListTreeIcon },
-      { href: "/enrollment", label: "Enrolment", icon: ShieldIcon },
+      { href: "/alerts", label: "Alerts", icon: BellRingIcon },
     ],
   },
   {
-    label: "Triage",
-    items: [{ href: "/alerts", label: "Alerts", icon: BellRingIcon }],
+    label: "Administration",
+    items: [{ href: "/enrollment", label: "Enrolment", icon: ShieldIcon }],
   },
 ]
 const NAV = NAV_GROUPS.flatMap((g) => g.items)
@@ -82,7 +71,7 @@ function HealthIndicator() {
         }
       />
       <TooltipContent>
-        {data?.counts ? `${data.counts.logs} logs · ${data.counts.alerts} alerts · v${data.version}` : label}
+        {data?.counts ? `${data.counts.devices} devices · ${data.counts.endpoint_events} events · ${data.counts.alerts} alerts · v${data.version}` : label}
       </TooltipContent>
     </Tooltip>
   )
@@ -127,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="flex items-center gap-1.5 font-semibold tracking-widest uppercase">
             <ActivityIcon className="size-3 text-primary" /> Prototype
           </span>
-          Student project · 100% synthetic data. Not production security software.
+          Student project · Not production security software.
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>

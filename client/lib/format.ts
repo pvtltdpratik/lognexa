@@ -22,6 +22,7 @@ export const severityColor: Record<Severity, string> = {
 export const formatDateTime = (iso: string) => format(parseISO(iso), "dd MMM yyyy, HH:mm:ss")
 export const formatShort = (iso: string) => format(parseISO(iso), "dd MMM, HH:mm")
 export const formatDay = (iso: string) => format(parseISO(iso), "dd MMM")
+export const formatHour = (iso: string) => format(parseISO(iso), "HH:mm")
 export const humanize = (s: string) => s.replace(/_/g, " ")
 export const nf = new Intl.NumberFormat("en-IN")
 export const pct = (v: number) => `${(v * 100).toFixed(1)}%`

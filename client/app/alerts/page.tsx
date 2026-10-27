@@ -9,9 +9,8 @@ import { useAuth } from "@/components/auth"
 import { OsBadge } from "@/components/endpoint-badges"
 import { PageIntro } from "@/components/app-shell"
 import { Pager } from "@/components/pager"
-import { RiskExplanation } from "@/components/risk-explanation"
 import { AlertStatusBadge, SeverityBadge } from "@/components/severity"
-import { EmptyState, ErrorState, TableSkeleton } from "@/components/states"
+import { EmptyState, ErrorState, SignInRequired, TableSkeleton } from "@/components/states"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,7 +27,7 @@ import { useApi, useDebounced } from "@/hooks/use-api"
 import { api } from "@/lib/api"
 import { formatDateTime, formatShort, humanize } from "@/lib/format"
 import { severityValues } from "@/lib/schemas"
-import type { Alert, AlertSource, AlertDetail, AlertStatus } from "@/lib/types"
+import type { Alert, AlertDetail, AlertStatus } from "@/lib/types"
 
 type Tab = AlertStatus | "all"
 
@@ -43,10 +42,6 @@ function renderResolution(data: AlertDetail) {
   if (data.status === "acknowledged" && data.resolution_note)
     return <p className="border-l-2 border-severity-medium p-2 text-xs text-muted-foreground">{data.resolution_note}</p>
   return null
-}
-
-function SourceBadge({ source }: { source: AlertSource }) {
-  return <Badge variant="outline" className="border px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">{source === "endpoint" ? "Endpoint" : "Access log"}</Badge>
 }
 
 function AlertActions({ alert, onAction }: { alert: Alert; onAction: (a: Alert, t: AlertStatus) => void }) {
@@ -78,7 +73,7 @@ function AlertSheet({ id, version, onClose, onAction }: { id: number | null; ver
       <SheetContent className="w-full gap-0 data-[side=right]:sm:max-w-xl">
         <SheetHeader className="border-b">
           <SheetTitle className="flex flex-wrap items-center gap-3">
-            Alert #{id} {data && <SeverityBadge severity={data.severity} />} {data && <AlertStatusBadge status={data.status} />} {data && <SourceBadge source={data.source} />}
+            Alert #{id} {data && <SeverityBadge severity={data.severity} />} {data && <AlertStatusBadge status={data.status} />}
           </SheetTitle>
           <SheetDescription>{data?.title ?? "Loading alert…"}</SheetDescription>
         </SheetHeader>
@@ -89,8 +84,7 @@ function AlertSheet({ id, version, onClose, onAction }: { id: number | null; ver
             <div className="p-4"><ErrorState error={error} onRetry={reload} /></div>
           ) : data ? (
             <div className="flex flex-col gap-5 p-4 text-sm">
-              {data.source === "endpoint" ? (
-                <>
+              <>
                   <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2">
                     <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Host</dt><dd>{data.hostname} {data.os_type && <span className="text-muted-foreground">({data.os_type})</span>}</dd>
                     <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Account</dt><dd>{data.username}</dd>
@@ -122,22 +116,7 @@ function AlertSheet({ id, version, onClose, onAction }: { id: number | null; ver
                       </ul>
                     </section>
                   )}
-                </>
-              ) : (
-                <>
-                  <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2">
-                    <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">User</dt><dd>{data.username}</dd>
-                    <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Event</dt>
-                    <dd>{data.log && <>{humanize(data.log.action)} · {data.log.status} · <span className="font-mono text-xs">{formatDateTime(data.log.timestamp)}</span></>}</dd>
-                    <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Resource</dt><dd className="font-mono text-xs">{data.log?.resource}</dd>
-                    <dt className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Source</dt>
-                    <dd>{data.log && <><span className="font-mono text-xs">{data.log.ip_address}</span> · {data.log.city}, {data.log.country} · {data.log.device}</>}</dd>
-                  </dl>
-                  {renderResolution(data)}
-                  <Separator />
-                  {data.risk ? <RiskExplanation risk={data.risk} /> : <p className="text-muted-foreground">Risk details are unavailable for this alert (the log was re-analysed).</p>}
-                </>
-              )}
+              </>
             </div>
           ) : null}
         </ScrollArea>
@@ -153,11 +132,10 @@ function AlertSheet({ id, version, onClose, onAction }: { id: number | null; ver
 
 function AlertsView() {
   const params = useSearchParams()
-  const { signedIn } = useAuth()
+  const { signedIn, ready } = useAuth()
   const focus = Number(params.get("focus")) || null
   const [tab, setTab] = React.useState<Tab>(focus ? "all" : "open")
   const [severity, setSeverity] = React.useState("")
-  const [source, setSource] = React.useState("")
   const [searchInput, setSearchInput] = React.useState("")
   const [sort, setSort] = React.useState("risk_desc")
   const [page, setPage] = React.useState(1)
@@ -166,30 +144,35 @@ function AlertsView() {
   const [version, setVersion] = React.useState(0)
   const search = useDebounced(searchInput.trim(), 350)
   const searchError = searchInput.length > 100 ? "Search must be 100 characters or fewer" : null
-  // Without a token the API only returns access-log alerts; don't request endpoint.
-  const effectiveSource = !signedIn ? "access_log" : source
-
   const { data, error, loading, reload } = useApi(
-    () => api.alerts({
-      page, page_size: 20, sort, severity, source: effectiveSource || undefined,
-      status: tab === "all" ? undefined : tab,
-      search: searchError ? undefined : search || undefined,
-    }),
-    [page, sort, severity, effectiveSource, tab, search, searchError, version]
+    () => signedIn
+      ? api.alerts({
+          page, page_size: 20, sort, severity, source: "endpoint",
+          status: tab === "all" ? undefined : tab,
+          search: searchError ? undefined : search || undefined,
+        })
+      : Promise.resolve(null),
+    [signedIn, page, sort, severity, tab, search, searchError, version]
   )
 
   const reset = () => setPage(1)
+  const intro = (
+    <PageIntro
+      title="Alerts"
+      description="Correlated endpoint detections whose risk crossed the threshold. Triage them by acknowledging and resolving with a note."
+    />
+  )
+  if (ready && !signedIn) {
+    return (
+      <>
+        {intro}
+        <SignInRequired feature="Alert triage" />
+      </>
+    )
+  }
   return (
     <>
-      <PageIntro
-        title="Alerts"
-        description="Access-log and endpoint alerts whose risk crossed the threshold. Triage them by acknowledging and resolving with a note."
-      />
-      {!signedIn && (
-        <p className="border-l-2 border-severity-medium bg-muted/40 p-2 text-xs text-muted-foreground">
-          Showing access-log alerts only. Sign in with an analyst or admin token (top bar) to see endpoint alerts.
-        </p>
-      )}
+      {intro}
       <Card size="sm">
         <CardContent className="flex flex-col gap-4">
           <Tabs value={tab} onValueChange={(v) => { setTab(v as Tab); reset() }}>
@@ -205,7 +188,7 @@ function AlertsView() {
               <FieldLabel htmlFor="alert-search" className="text-xs">Search</FieldLabel>
               <InputGroup>
                 <InputGroupAddon><SearchIcon /></InputGroupAddon>
-                <InputGroupInput id="alert-search" placeholder="User, title, resource or IP" value={searchInput}
+                <InputGroupInput id="alert-search" placeholder="Title, host, account or IP" value={searchInput}
                   aria-invalid={!!searchError} onChange={(e) => { setSearchInput(e.target.value); reset() }} />
               </InputGroup>
               <FieldError>{searchError}</FieldError>
@@ -217,16 +200,6 @@ function AlertsView() {
                 {severityValues.map((s) => <NativeSelectOption key={s} value={s}>{humanize(s)}</NativeSelectOption>)}
               </NativeSelect>
             </Field>
-            {signedIn && (
-              <Field className="min-w-36 sm:w-44">
-                <FieldLabel htmlFor="alert-source" className="text-xs">Source</FieldLabel>
-                <NativeSelect id="alert-source" value={source} onChange={(e) => { setSource(e.target.value); reset() }} className="w-full">
-                  <NativeSelectOption value="">All sources</NativeSelectOption>
-                  <NativeSelectOption value="access_log">Access log</NativeSelectOption>
-                  <NativeSelectOption value="endpoint">Endpoint</NativeSelectOption>
-                </NativeSelect>
-              </Field>
-            )}
             <Field className="min-w-36 sm:w-44">
               <FieldLabel htmlFor="alert-sort" className="text-xs">Sort</FieldLabel>
               <NativeSelect id="alert-sort" value={sort} onChange={(e) => { setSort(e.target.value); reset() }} className="w-full">
@@ -246,14 +219,14 @@ function AlertsView() {
             <TableSkeleton rows={8} cols={5} />
           ) : data && data.total === 0 ? (
             <EmptyState icon={BellOffIcon} title={tab === "open" ? "No open alerts" : "No alerts here"}
-              description={tab === "open" ? "Every alert has been triaged, or no analysis has been run yet." : "Nothing matches the current filters."} />
+              description={tab === "open" ? "Every alert has been triaged, or no detection has fired yet." : "Nothing matches the current filters."} />
           ) : data ? (
             <>
               <Table className={loading ? "opacity-60 transition-opacity" : ""}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Alert</TableHead>
-                    <TableHead>User</TableHead>
+                    <TableHead>Host</TableHead>
                     <TableHead className="hidden md:table-cell">Event time</TableHead>
                     <TableHead>Severity</TableHead>
                     <TableHead className="hidden sm:table-cell">Status</TableHead>
@@ -266,15 +239,13 @@ function AlertsView() {
                       <TableCell className="max-w-80">
                         <button className="flex items-center gap-2 text-left font-medium hover:text-primary" onClick={() => setOpenId(a.id)}>
                           <span className="font-mono text-xs text-muted-foreground">#{a.id}</span>{a.title}
-                          {a.source === "endpoint" && a.event_count && a.event_count > 1 ? <Badge variant="outline" className="px-1 py-0 text-[0.6rem]">×{a.event_count}</Badge> : null}
+                          {a.event_count && a.event_count > 1 ? <Badge variant="outline" className="px-1 py-0 text-[0.6rem]">×{a.event_count}</Badge> : null}
                         </button>
                         <div className="truncate font-mono text-xs text-muted-foreground">{a.resource} · {a.ip_address ?? ""}</div>
                       </TableCell>
                       <TableCell>
-                        {a.source === "endpoint" ? (
-                          <span className="flex items-center gap-1.5">{a.os_type && <OsBadge os={a.os_type as "windows" | "linux"} />}</span>
-                        ) : a.username}
-                        <div className="text-xs text-muted-foreground">{a.source === "endpoint" ? a.hostname : <SourceBadge source={a.source} />}</div>
+                        <span className="flex items-center gap-1.5">{a.os_type && <OsBadge os={a.os_type as "windows" | "linux"} />}</span>
+                        <div className="text-xs text-muted-foreground">{a.hostname}</div>
                       </TableCell>
                       <TableCell className="hidden font-mono text-xs md:table-cell">{formatShort(a.timestamp)}</TableCell>
                       <TableCell>

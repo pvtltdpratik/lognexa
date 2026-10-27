@@ -1,7 +1,7 @@
 from collections import Counter
 
 from app.services.policy import is_authorised
-from app.services.synthetic import generate_dataset
+from tests.synthetic import generate_dataset
 
 
 def test_default_dataset_shape():

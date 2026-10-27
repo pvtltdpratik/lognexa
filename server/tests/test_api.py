@@ -151,20 +151,14 @@ def test_reanalysis_keeps_resolved_alerts(client):
     assert client.get("/analyze/latest").json()["id"] == run["id"]
 
 
-def test_dataset_generate_validation(client):
-    _error(client.post("/dataset/generate", json={"n_users": 2}), 422, "validation_error")
-    _error(client.post("/dataset/generate", json={"n_users": 100, "n_records": 300}), 422, "validation_error")
-
-
 # --- empty database -------------------------------------------------------------
+def test_dataset_generator_api_removed(client):
+    # The app no longer fabricates data; only real data is stored.
+    assert client.post("/dataset/generate", json={}).status_code in (404, 405)
+
+
 def test_empty_database_behaviour(empty_client):
     assert empty_client.get("/logs").json() == {"items": [], "total": 0, "page": 1, "page_size": 25, "pages": 0}
     assert empty_client.get("/analytics/overview").json()["total_logs"] == 0
     _error(empty_client.post("/analyze", json={}), 409, "no_data")
     _error(empty_client.get("/analyze/latest"), 404, "not_found")
-
-
-def test_dataset_generate_on_empty_db(empty_client):
-    body = empty_client.post("/dataset/generate", json={"seed": 3, "n_users": 12, "days": 3, "n_records": 300}).json()
-    assert body["users"] == 12 and body["logs"] == 300
-    assert body["analysis"]["status"] == "completed"

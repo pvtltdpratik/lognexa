@@ -224,29 +224,6 @@ class AnalysisRunOut(ORM):
     error: str | None
 
 
-class DatasetRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    seed: int = Field(42, ge=0, le=2**31 - 1)
-    n_users: int = Field(60, ge=6, le=500)
-    days: int = Field(14, ge=1, le=90)
-    n_records: int = Field(2200, ge=200, le=50000)
-    run_analysis: bool = True
-
-    @model_validator(mode="after")
-    def _enough_records(self) -> "DatasetRequest":
-        if self.n_records < self.n_users * 5:
-            raise ValueError("n_records must be at least 5 x n_users")
-        return self
-
-
-class DatasetResult(BaseModel):
-    users: int
-    logs: int
-    injected_anomalies: int
-    analysis: AnalysisRunOut | None = None
-
-
 # --- analytics -------------------------------------------------------------
 class Overview(BaseModel):
     total_logs: int

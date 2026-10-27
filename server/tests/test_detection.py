@@ -7,7 +7,7 @@ from app.services.features import build_features
 from app.services.pipeline import AnalysisParams, evaluation_metrics, score_frame
 from app.services.rules import evaluate_row
 from app.services.scoring import AGREEMENT_BONUS, classify, combine_scores
-from app.services.synthetic import generate_dataset
+from tests.synthetic import generate_dataset
 
 
 def _frame(events: list[dict]) -> pd.DataFrame:

@@ -1,5 +1,4 @@
 import type {
-  AccessLog,
   Device,
   DeviceDetail,
   EndpointEvent,
@@ -7,20 +6,12 @@ import type {
   EndpointOverview,
   EnrollmentToken,
   EnrollmentTokenCreated,
-  AccessLogDetail,
   Alert,
   AlertDetail,
-  AnalysisRun,
-  DatasetResult,
   Health,
-  Methodology,
-  Overview,
   Page,
-  RiskScoreListItem,
-  User,
-  UserRisk,
 } from "@/lib/types"
-import type { AlertUpdateInput, AnalyzeInput, DatasetInput } from "@/lib/schemas"
+import type { AlertUpdateInput } from "@/lib/schemas"
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "")
 
@@ -120,21 +111,10 @@ export function errorMessage(e: unknown): string {
 
 export const api = {
   health: () => request<Health>("/health"),
-  overview: () => request<Overview>("/analytics/overview"),
-  users: () => request<User[]>("/users"),
-  logs: (query: Query) => request<Page<AccessLog>>("/logs", { query }),
-  log: (id: number) => request<AccessLogDetail>(`/logs/${id}`),
   alerts: (query: Query) => request<Page<Alert>>("/alerts", { query }),
   alert: (id: number) => request<AlertDetail>(`/alerts/${id}`),
   updateAlert: (id: number, body: AlertUpdateInput) =>
     request<Alert>(`/alerts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  riskScores: (query: Query) => request<Page<RiskScoreListItem>>("/risk-scores", { query }),
-  userRisk: (limit = 10) => request<UserRisk[]>("/risk-scores/users", { query: { limit } }),
-  methodology: () => request<Methodology>("/risk-scores/methodology"),
-  analyze: (body: AnalyzeInput) => request<AnalysisRun>("/analyze", { method: "POST", body: JSON.stringify(body) }),
-  runs: (limit = 10) => request<AnalysisRun[]>("/analyze/runs", { query: { limit } }),
-  generateDataset: (body: DatasetInput) =>
-    request<DatasetResult>("/dataset/generate", { method: "POST", body: JSON.stringify({ ...body, run_analysis: true }) }),
 
   // --- endpoint monitoring (require an analyst/admin token) ---
   me: () => request<{ role: "analyst" | "admin" }>("/auth/me"),
