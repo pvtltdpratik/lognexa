@@ -1,13 +1,15 @@
+# Upper bounds keep fresh installs (e.g. Vercel builds) on versions the test suite
+# passes on. Raise them only after running the tests against the new versions.
 fastapi>=0.115
 uvicorn[standard]>=0.30
-SQLAlchemy>=2.0
+SQLAlchemy>=2.0,<2.1        # 2.1 switches postgresql:// to the psycopg (v3) driver
 alembic>=1.13
 psycopg2-binary>=2.9
 pydantic>=2.7
 pydantic-settings>=2.3
 python-dotenv>=1.0
-pandas>=2.2
-numpy>=1.26
-scikit-learn>=1.5
+pandas>=2.2,<3              # pandas 3 changes missing-string handling (breaks ingest)
+numpy>=1.26,<2.3
+scikit-learn>=1.5,<1.8
 pytest>=8.0
 httpx>=0.27

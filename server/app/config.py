@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _anchor_sqlite(cls, v: str) -> str:
+        # Hosting dashboards hand out URLs like postgres://… or postgresql://…, often
+        # pasted with quotes. Pin the installed driver: SQLAlchemy rejects postgres://
+        # and, from 2.1, maps postgresql:// to psycopg v3, which is not installed.
+        v = v.strip().strip("'\"")
+        for scheme in ("postgres://", "postgresql://"):
+            if v.startswith(scheme):
+                v = "postgresql+psycopg2://" + v[len(scheme):]
         # Resolve relative SQLite paths against server/ so the DB file is the same
         # no matter which directory uvicorn / pytest is started from.
         prefix = "sqlite:///"
