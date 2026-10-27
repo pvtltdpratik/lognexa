@@ -1,6 +1,6 @@
 """Dashboard APIs for endpoint monitoring (analyst / admin only)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from math import ceil
 from typing import Literal
 
@@ -196,6 +196,12 @@ def _event_out(ev: EndpointEvent, hostname: str, alerts: dict[int, int]) -> Endp
     )
 
 
+def _as_naive_utc(v: datetime | None) -> datetime | None:
+    if v is not None and v.tzinfo is not None:
+        return v.astimezone(timezone.utc).replace(tzinfo=None)
+    return v
+
+
 @router.get("/endpoint-events", response_model=Page[EndpointEventOut], summary="Endpoint telemetry with filters")
 def list_events(
     page: int = Query(1, ge=1, le=10_000),
@@ -214,6 +220,9 @@ def list_events(
     db: Session = Depends(get_db),
     _: Principal = Depends(require_analyst),
 ):
+    # Stored timestamps are naive UTC; compare like with like (the dashboard sends
+    # timezone-aware bounds such as 2026-10-28T00:50:00Z).
+    start, end = _as_naive_utc(start), _as_naive_utc(end)
     if start and end and end < start:
         raise APIError(422, "validation_error", "end must not be earlier than start",
                        [{"field": "end", "message": "end must not be earlier than start"}])

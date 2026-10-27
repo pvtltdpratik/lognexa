@@ -200,3 +200,24 @@ def test_endpoint_alerts_separate_from_access_log(ep_client, enrolled_device):
     resolved = ep_client.patch(f"/alerts/{alert['id']}", headers=ep_client.analyst,
                               json={"status": "resolved", "resolution_note": "benign admin action", "resolved_by": "Analyst"})
     assert resolved.status_code == 200 and resolved.json()["status"] == "resolved"
+
+
+def test_event_time_range_and_sort(ep_client, enrolled_device):
+    cred, _, _ = enrolled_device
+    base = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+    ep_client.post("/agent/events", headers=cred, json={"events": [
+        _event(f"range{i}", category="system", event_type="time_probe",
+               timestamp=(base + timedelta(minutes=10 * i)).isoformat())
+        for i in range(4)  # 12:00, 12:10, 12:20, 12:30 UTC
+    ]})
+    q = {"search": "time_probe", "start": "2026-03-01T12:05:00Z", "end": "2026-03-01T12:25:00Z"}
+    newest = ep_client.get("/endpoint-events", headers=ep_client.analyst, params={**q, "sort": "newest"}).json()
+    assert [e["timestamp"] for e in newest["items"]] == ["2026-03-01T12:20:00", "2026-03-01T12:10:00"]
+    oldest = ep_client.get("/endpoint-events", headers=ep_client.analyst, params={**q, "sort": "oldest"}).json()
+    assert [e["timestamp"] for e in oldest["items"]] == ["2026-03-01T12:10:00", "2026-03-01T12:20:00"]
+    # A bound in another timezone (IST, +05:30) means the same instant.
+    ist = ep_client.get("/endpoint-events", headers=ep_client.analyst, params={
+        "search": "time_probe", "start": "2026-03-01T17:45:00+05:30", "sort": "oldest"}).json()
+    assert [e["timestamp"] for e in ist["items"]] == ["2026-03-01T12:20:00", "2026-03-01T12:30:00"]
+    _err(ep_client.get("/endpoint-events", headers=ep_client.analyst, params={
+        "start": "2026-03-01T12:30:00Z", "end": "2026-03-01T12:00:00Z"}), 422, "validation_error")

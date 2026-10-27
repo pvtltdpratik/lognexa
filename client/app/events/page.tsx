@@ -1,6 +1,7 @@
 "use client"
 
-import { BellRingIcon, PlayIcon, SearchIcon } from "lucide-react"
+import { format } from "date-fns"
+import { BellRingIcon, ClockIcon, PlayIcon, SearchIcon } from "lucide-react"
 import * as React from "react"
 
 import { PageIntro } from "@/components/app-shell"
@@ -11,16 +12,59 @@ import { Pager } from "@/components/pager"
 import { SeverityBadge } from "@/components/severity"
 import { EmptyState, ErrorState, SignInRequired, TableSkeleton } from "@/components/states"
 import { Card, CardContent } from "@/components/ui/card"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useApi, useDebounced } from "@/hooks/use-api"
 import { api } from "@/lib/api"
-import { formatShort, humanize } from "@/lib/format"
+import { formatPrecise, humanize } from "@/lib/format"
 
 const CATEGORIES = ["authentication", "process", "network", "file", "persistence", "system"]
+
+type Sort = "newest" | "oldest" | "risk_desc"
+const SORTS: { value: Sort; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "risk_desc", label: "Highest risk" },
+]
+
+type Range = "all" | "15m" | "1h" | "6h" | "24h" | "7d" | "custom"
+const MIN = 60_000
+const RANGES: { value: Range; label: string; ms?: number }[] = [
+  { value: "all", label: "Any time" },
+  { value: "15m", label: "Last 15 minutes", ms: 15 * MIN },
+  { value: "1h", label: "Last hour", ms: 60 * MIN },
+  { value: "6h", label: "Last 6 hours", ms: 6 * 60 * MIN },
+  { value: "24h", label: "Last 24 hours", ms: 24 * 60 * MIN },
+  { value: "7d", label: "Last 7 days", ms: 7 * 24 * 60 * MIN },
+  { value: "custom", label: "Custom range…" },
+]
+
+/** Time bounds for the API, as UTC ISO strings. Relative ranges are recomputed on each call. */
+function timeBounds(range: Range, from: string, to: string): { start?: string; end?: string } {
+  if (range === "custom") {
+    return {
+      // datetime-local values are local wall-clock time; toISOString() converts to UTC.
+      start: from ? new Date(from).toISOString() : undefined,
+      // "To" is minute-precise; include the whole minute the user picked.
+      end: to ? new Date(new Date(to).getTime() + MIN - 1).toISOString() : undefined,
+    }
+  }
+  const ms = RANGES.find((r) => r.value === range)?.ms
+  return ms ? { start: new Date(Date.now() - ms).toISOString() } : {}
+}
+
+function describeRange(range: Range, from: string, to: string): string {
+  if (range !== "custom") return RANGES.find((r) => r.value === range)!.label.toLowerCase()
+  const fmt = (v: string) => format(new Date(v), "dd MMM yyyy, HH:mm")
+  if (from && to) return `from ${fmt(from)} to ${fmt(to)}`
+  if (from) return `since ${fmt(from)}`
+  if (to) return `up to ${fmt(to)}`
+  return "any time"
+}
 
 export default function EventsPage() {
   const { signedIn, ready } = useAuth()
@@ -29,26 +73,37 @@ export default function EventsPage() {
   const [severity, setSeverity] = React.useState("")
   const [flagged, setFlagged] = React.useState(false)
   const [searchInput, setSearchInput] = React.useState("")
+  const [sort, setSort] = React.useState<Sort>("newest")
+  const [range, setRange] = React.useState<Range>("all")
+  const [from, setFrom] = React.useState("")
+  const [to, setTo] = React.useState("")
   const [page, setPage] = React.useState(1)
   const [live, setLive] = React.useState(false)
   const [tick, setTick] = React.useState(0)
   const [selected, setSelected] = React.useState<number | null>(null)
   const search = useDebounced(searchInput.trim(), 300)
 
+  const rangeError = range === "custom" && from && to && new Date(to) < new Date(from)
+    ? "“To” must be the same as or later than “From”" : null
+  // New arrivals only appear at the top of a newest-first view over a moving window.
+  const liveAllowed = sort === "newest" && range !== "custom"
+  const liveOn = live && liveAllowed
+
   // Live mode polls the newest page every 5s (only on page 1).
   React.useEffect(() => {
-    if (!live) return
+    if (!liveOn) return
     const id = setInterval(() => setTick((t) => t + 1), 5000)
     return () => clearInterval(id)
-  }, [live])
+  }, [liveOn])
 
   const reset = () => setPage(1)
   const { data, error, loading, reload } = useApi(
-    () => (signedIn ? api.endpointEvents({
-      page, page_size: 50, sort: "newest", os_type: os, category, severity,
+    () => (signedIn && !rangeError ? api.endpointEvents({
+      page, page_size: 50, sort, os_type: os, category, severity,
       flagged: flagged || undefined, search: search || undefined,
+      ...timeBounds(range, from, to),
     }) : Promise.resolve(null)),
-    [signedIn, page, os, category, severity, flagged, search, tick]
+    [signedIn, page, sort, os, category, severity, flagged, search, range, from, to, rangeError, tick]
   )
 
   if (ready && !signedIn) {
@@ -60,15 +115,17 @@ export default function EventsPage() {
     )
   }
 
+  const sortLabel = SORTS.find((s) => s.value === sort)!.label.toLowerCase()
   return (
     <>
       <PageIntro
         title="Live events"
         description="Normalised Windows and Linux telemetry. Flagged events triggered at least one detection rule."
         actions={
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={live} onCheckedChange={(v) => { setLive(v); setPage(1) }} id="live" />
+          <label className="flex items-center gap-2 text-sm" title={liveAllowed ? undefined : "Live updates need “Newest first” and a non-custom time range"}>
+            <Switch checked={liveOn} disabled={!liveAllowed} onCheckedChange={(v) => { setLive(v); setPage(1) }} id="live" />
             <span className="flex items-center gap-1"><PlayIcon className="size-3.5" /> Live</span>
+            {!liveAllowed && <span className="text-xs text-muted-foreground">(newest first only)</span>}
           </label>
         }
       />
@@ -105,10 +162,46 @@ export default function EventsPage() {
             </label>
           </div>
 
-          {error ? <ErrorState error={error} onRetry={reload} /> : loading && !data ? (
+          <div className="flex flex-col flex-wrap gap-4 border-t pt-4 sm:flex-row sm:items-start">
+            <Field className="min-w-40 sm:w-44"><FieldLabel htmlFor="ev-sort" className="text-xs">Order</FieldLabel>
+              <NativeSelect id="ev-sort" value={sort} onChange={(e) => { setSort(e.target.value as Sort); reset() }} className="w-full">
+                {SORTS.map((s) => <NativeSelectOption key={s.value} value={s.value}>{s.label}</NativeSelectOption>)}
+              </NativeSelect>
+            </Field>
+            <Field className="min-w-40 sm:w-48"><FieldLabel htmlFor="ev-range" className="text-xs">Time range</FieldLabel>
+              <NativeSelect id="ev-range" value={range} onChange={(e) => { setRange(e.target.value as Range); reset() }} className="w-full">
+                {RANGES.map((r) => <NativeSelectOption key={r.value} value={r.value}>{r.label}</NativeSelectOption>)}
+              </NativeSelect>
+            </Field>
+            {range === "custom" && (
+              <>
+                <Field className="sm:w-56"><FieldLabel htmlFor="ev-from" className="text-xs">From (local time)</FieldLabel>
+                  <Input id="ev-from" type="datetime-local" value={from} max={to || undefined}
+                    onChange={(e) => { setFrom(e.target.value); reset() }} />
+                </Field>
+                <Field className="sm:w-56" data-invalid={!!rangeError}><FieldLabel htmlFor="ev-to" className="text-xs">To (local time)</FieldLabel>
+                  <Input id="ev-to" type="datetime-local" value={to} min={from || undefined} aria-invalid={!!rangeError}
+                    onChange={(e) => { setTo(e.target.value); reset() }} />
+                  <FieldError>{rangeError}</FieldError>
+                </Field>
+              </>
+            )}
+          </div>
+
+          {!rangeError && data && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+              <ClockIcon className="size-3.5" />
+              {data.total.toLocaleString()} event{data.total === 1 ? "" : "s"} · {describeRange(range, from, to)} · {sortLabel}
+              {liveOn && " · updating every 5s"}
+            </p>
+          )}
+
+          {rangeError ? (
+            <EmptyState title="Fix the time range" description="Choose a “To” time that is the same as or later than “From”." />
+          ) : error ? <ErrorState error={error} onRetry={reload} /> : loading && !data ? (
             <TableSkeleton rows={10} cols={6} />
           ) : data && data.total === 0 ? (
-            <EmptyState title="No events" description="No telemetry matches these filters yet." />
+            <EmptyState title="No events" description="No telemetry matches these filters and time range." />
           ) : data ? (
             <>
               <Table className={loading ? "opacity-60" : ""}>
@@ -126,7 +219,7 @@ export default function EventsPage() {
                   {data.items.map((e) => (
                     <TableRow key={e.id} className="cursor-pointer" tabIndex={0} onClick={() => setSelected(e.id)}
                       onKeyDown={(k) => k.key === "Enter" && setSelected(e.id)}>
-                      <TableCell className="font-mono text-xs whitespace-nowrap">{formatShort(e.timestamp)}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{formatPrecise(e.timestamp)}</TableCell>
                       <TableCell><div className="font-medium">{e.hostname}</div><OsBadge os={e.os_type} /></TableCell>
                       <TableCell><span className="capitalize">{humanize(e.event_type)}</span><div className="text-xs text-muted-foreground">{humanize(e.category)}</div></TableCell>
                       <TableCell className="hidden max-w-64 truncate font-mono text-xs md:table-cell">
